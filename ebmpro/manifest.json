@@ -1,0 +1,14 @@
+{
+  "name": "Easy Builders Merchant Pro",
+  "short_name": "EBM Pro",
+  "start_url": "/ebmpro/",
+  "scope": "/ebmpro/",
+  "display": "standalone",
+  "background_color": "#1a3a5c",
+  "theme_color": "#1a3a5c",
+  "description": "Invoicing system for Easy Builders Merchant - Falcarragh & Gweedore",
+  "icons": [
+    { "src": "/ebmpro/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/ebmpro/icons/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
