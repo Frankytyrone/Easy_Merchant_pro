@@ -23,7 +23,7 @@ try {
     $pdo = getDb();
 
     // ── Customer details ──────────────────────────────────────────────────────
-    $stmt = $pdo->prepare('SELECT * FROM customers WHERE id = ? AND deleted_at IS NULL');
+    $stmt = $pdo->prepare('SELECT * FROM customers WHERE id = ?');
     $stmt->execute([$customerId]);
     $customer = $stmt->fetch();
     if (!$customer) {
@@ -57,8 +57,8 @@ try {
         $params[] = $dateTo;
     }
 
-    $sql = 'SELECT id, invoice_number, type, invoice_date, due_date,
-                   total, amount_paid, balance, status, currency
+    $sql = 'SELECT id, invoice_number, invoice_type, invoice_date, due_date,
+                   total, amount_paid, balance, status
             FROM invoices
             WHERE ' . implode(' AND ', $where) . '
             ORDER BY invoice_date ASC, id ASC';

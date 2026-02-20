@@ -17,7 +17,9 @@ const APP_ASSETS = [
   '/ebmpro/js/customer.js',
   '/ebmpro/js/product.js',
   '/ebmpro/js/pdf.js',
-  '/ebmpro/manifest.json'
+  '/ebmpro/manifest.json',
+  '/ebmpro/vendor/jspdf.umd.min.js',
+  '/ebmpro/vendor/jspdf.plugin.autotable.min.js'
 ];
 
 /* ── Install: pre-cache all app assets ─────────────────────── */

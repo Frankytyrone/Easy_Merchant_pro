@@ -71,7 +71,7 @@ const Product = (() => {
         <span class="item-code">${escapeHtml(prod.code || '')}</span>
         ${escapeHtml(prod.description || '')}
         <span class="item-vat">${prod.vat_rate || 0}% VAT</span>
-        <span class="item-price">${fmt(prod.price)}</span>
+        <span class="item-price">${fmt(prod.unit_price)}</span>
       `;
       li.addEventListener('mousedown', e => {
         e.preventDefault();
