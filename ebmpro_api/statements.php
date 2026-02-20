@@ -37,7 +37,7 @@ try {
             "SELECT COALESCE(SUM(balance), 0)
              FROM invoices
              WHERE customer_id = ?
-               AND status NOT IN ('cancelled','deleted')
+               AND status != 'cancelled'
                AND invoice_date < ?"
         );
         $stmt->execute([$customerId, $dateFrom]);
@@ -45,7 +45,7 @@ try {
     }
 
     // ── Invoices within period ────────────────────────────────────────────────
-    $where  = ["customer_id = ?", "status NOT IN ('cancelled','deleted')"];
+    $where  = ["customer_id = ?", "status != 'cancelled'"];
     $params = [$customerId];
 
     if ($dateFrom) {

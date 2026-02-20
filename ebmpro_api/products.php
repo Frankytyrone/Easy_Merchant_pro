@@ -23,7 +23,7 @@ try {
     if ($method === 'GET') {
         // Single product
         if (!empty($_GET['id'])) {
-            $stmt = $pdo->prepare('SELECT * FROM products WHERE id = ? AND is_active = 1');
+            $stmt = $pdo->prepare('SELECT * FROM products WHERE id = ? AND active = 1');
             $stmt->execute([(int)$_GET['id']]);
             $product = $stmt->fetch();
             if (!$product) {
@@ -32,18 +32,18 @@ try {
             jsonResponse(['success' => true, 'data' => $product]);
         }
 
-        // Full-text / LIKE search
+        // Full-text / LIKE search on description and code
         if (!empty($_GET['q'])) {
             $q   = trim($_GET['q']);
             $res = [];
 
-            // Try MATCH AGAINST first (requires FULLTEXT index on products)
+            // Try MATCH AGAINST first (FULLTEXT index is on description column)
             try {
                 $stmt = $pdo->prepare(
-                    'SELECT *, MATCH(name, description, sku) AGAINST(? IN BOOLEAN MODE) AS score
+                    'SELECT *, MATCH(description) AGAINST(? IN BOOLEAN MODE) AS score
                      FROM products
-                     WHERE is_active = 1
-                       AND MATCH(name, description, sku) AGAINST(? IN BOOLEAN MODE)
+                     WHERE active = 1
+                       AND MATCH(description) AGAINST(? IN BOOLEAN MODE)
                      ORDER BY score DESC
                      LIMIT 20'
                 );
@@ -58,12 +58,12 @@ try {
                 $like = '%' . $q . '%';
                 $stmt = $pdo->prepare(
                     'SELECT * FROM products
-                     WHERE is_active = 1
-                       AND (name LIKE ? OR sku LIKE ? OR description LIKE ?)
-                     ORDER BY name ASC
+                     WHERE active = 1
+                       AND (description LIKE ? OR code LIKE ?)
+                     ORDER BY description ASC
                      LIMIT 20'
                 );
-                $stmt->execute([$like, $like, $like]);
+                $stmt->execute([$like, $like]);
                 $res = $stmt->fetchAll();
             }
 
@@ -76,13 +76,13 @@ try {
         $offset  = ($page - 1) * $perPage;
 
         $stmt = $pdo->prepare(
-            'SELECT * FROM products WHERE is_active = 1
-             ORDER BY name ASC LIMIT ? OFFSET ?'
+            'SELECT * FROM products WHERE active = 1
+             ORDER BY description ASC LIMIT ? OFFSET ?'
         );
         $stmt->execute([$perPage, $offset]);
         $products = $stmt->fetchAll();
 
-        $total = (int)$pdo->query('SELECT COUNT(*) FROM products WHERE is_active = 1')->fetchColumn();
+        $total = (int)$pdo->query('SELECT COUNT(*) FROM products WHERE active = 1')->fetchColumn();
 
         jsonResponse(['success' => true, 'data' => $products, 'meta' => [
             'total'    => $total,
@@ -94,28 +94,26 @@ try {
 
     // ════════════════════════════════════════════════════════════════════════
     // POST — create (admin only)
+    // Schema columns: id, code, description, unit_price, vat_rate, unit, active
     // ════════════════════════════════════════════════════════════════════════
     if ($method === 'POST') {
         requireAdmin($auth);
         $body = json_decode(file_get_contents('php://input'), true) ?? [];
 
-        if (empty($body['name'])) {
-            jsonResponse(['success' => false, 'error' => 'name is required'], 422);
+        if (empty($body['description'])) {
+            jsonResponse(['success' => false, 'error' => 'description is required'], 422);
         }
 
         $stmt = $pdo->prepare(
-            'INSERT INTO products
-             (sku, name, description, unit_price, vat_rate, unit, stock_qty, is_active, created_at, updated_at)
-             VALUES (?,?,?,?,?,?,?,1,NOW(),NOW())'
+            'INSERT INTO products (code, description, unit_price, vat_rate, unit, active)
+             VALUES (?,?,?,?,?,1)'
         );
         $stmt->execute([
-            $body['sku']         ?? null,
-            trim($body['name']),
-            $body['description'] ?? null,
-            round((float)($body['unit_price'] ?? 0), 4),
-            round((float)($body['vat_rate']   ?? 0), 4),
+            $body['code']        ?? null,
+            trim($body['description']),
+            round((float)($body['unit_price'] ?? 0), 2),
+            round((float)($body['vat_rate']   ?? 23), 2),
             $body['unit']        ?? 'each',
-            (int)($body['stock_qty'] ?? 0),
         ]);
         $newId = (int)$pdo->lastInsertId();
 
@@ -150,23 +148,18 @@ try {
 
         $pdo->prepare(
             'UPDATE products
-             SET sku         = COALESCE(?, sku),
-                 name        = COALESCE(?, name),
+             SET code        = COALESCE(?, code),
                  description = COALESCE(?, description),
                  unit_price  = COALESCE(?, unit_price),
                  vat_rate    = COALESCE(?, vat_rate),
-                 unit        = COALESCE(?, unit),
-                 stock_qty   = COALESCE(?, stock_qty),
-                 updated_at  = NOW()
+                 unit        = COALESCE(?, unit)
              WHERE id = ?'
         )->execute([
-            $body['sku']         ?? null,
-            $body['name']        ?? null,
+            $body['code']        ?? null,
             $body['description'] ?? null,
-            isset($body['unit_price']) ? round((float)$body['unit_price'], 4) : null,
-            isset($body['vat_rate'])   ? round((float)$body['vat_rate'],   4) : null,
+            isset($body['unit_price']) ? round((float)$body['unit_price'], 2) : null,
+            isset($body['vat_rate'])   ? round((float)$body['vat_rate'],   2) : null,
             $body['unit']        ?? null,
-            isset($body['stock_qty'])  ? (int)$body['stock_qty']             : null,
             $id,
         ]);
 
@@ -181,7 +174,7 @@ try {
     }
 
     // ════════════════════════════════════════════════════════════════════════
-    // DELETE — soft-delete (admin only)
+    // DELETE — soft-delete via active=0 (admin only)
     // ════════════════════════════════════════════════════════════════════════
     if ($method === 'DELETE') {
         requireAdmin($auth);
@@ -197,8 +190,7 @@ try {
             jsonResponse(['success' => false, 'error' => 'Product not found'], 404);
         }
 
-        $pdo->prepare('UPDATE products SET is_active = 0, updated_at = NOW() WHERE id = ?')
-            ->execute([$id]);
+        $pdo->prepare('UPDATE products SET active = 0 WHERE id = ?')->execute([$id]);
 
         auditLog($pdo, (int)$auth['user_id'], $auth['username'], null,
             'delete', 'product', $id, $old, null);

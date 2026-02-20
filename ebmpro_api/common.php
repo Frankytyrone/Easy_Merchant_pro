@@ -131,7 +131,7 @@ function requireAuth(): array
  * @param PDO         $pdo
  * @param int|null    $userId
  * @param string      $userName
- * @param int|null    $storeContext  store_id relevant to the action
+ * @param mixed       $storeContext  store code (VARCHAR) or store_id (int); stored in store_context
  * @param string      $action        e.g. 'create', 'update', 'delete'
  * @param string      $entityType    e.g. 'invoice', 'customer'
  * @param int|null    $entityId
@@ -142,7 +142,7 @@ function auditLog(
     PDO $pdo,
     ?int $userId,
     string $userName,
-    ?int $storeContext,
+    $storeContext,
     string $action,
     string $entityType,
     ?int $entityId,
@@ -152,14 +152,14 @@ function auditLog(
     try {
         $stmt = $pdo->prepare(
             'INSERT INTO audit_log
-             (user_id, user_name, store_id, action, entity_type, entity_id,
+             (user_id, user_name, store_context, action, entity_type, entity_id,
               old_values, new_values, ip_address, created_at)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())'
         );
         $stmt->execute([
             $userId,
             $userName,
-            $storeContext,
+            $storeContext,   // stored in store_context column
             $action,
             $entityType,
             $entityId,

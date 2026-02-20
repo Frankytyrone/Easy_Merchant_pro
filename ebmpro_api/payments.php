@@ -24,7 +24,7 @@ function syncInvoiceBalance(PDO $pdo, int $invoiceId): void
     $paid    = round((float)$stmt->fetchColumn(), 2);
     $balance = round($total - $paid, 2);
 
-    $status = 'pending';
+    $status = 'draft';
     if ($balance <= 0) {
         $status = 'paid';
     } elseif ($paid > 0) {

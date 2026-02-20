@@ -39,7 +39,7 @@ try {
         }
 
         // List / search
-        $where  = ['deleted_at IS NULL'];
+        $where  = ['1=1'];
         $params = [];
 
         if (!empty($_GET['q'])) {
@@ -49,11 +49,6 @@ try {
             $params[] = $like;
             $params[] = $like;
             $params[] = $like;
-        }
-
-        if (!empty($_GET['store_id'])) {
-            $where[]  = 'store_id = ?';
-            $params[] = (int)$_GET['store_id'];
         }
 
         $sql  = 'SELECT * FROM customers WHERE ' . implode(' AND ', $where)
@@ -86,20 +81,24 @@ try {
 
         $stmt = $pdo->prepare(
             'INSERT INTO customers
-             (store_id, account_no, name, email, telephone, address, vat_number,
-              credit_limit, is_cash_sale, created_at, updated_at)
-             VALUES (?,?,?,?,?,?,?,?,?,NOW(),NOW())'
+             (account_no, name, email, telephone,
+              address_1, address_2, address_3, town, region, eircode,
+              is_cash_sale, notes, created_at, updated_at)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,NOW(),NOW())'
         );
         $stmt->execute([
-            !empty($body['store_id']) ? (int)$body['store_id'] : null,
             $accountNo,
             trim($body['name']),
-            $body['email']        ?? null,
-            $body['telephone']    ?? null,
-            $body['address']      ?? null,
-            $body['vat_number']   ?? null,
-            !empty($body['credit_limit']) ? (float)$body['credit_limit'] : 0,
+            $body['email']       ?? null,
+            $body['telephone']   ?? null,
+            $body['address_1']   ?? null,
+            $body['address_2']   ?? null,
+            $body['address_3']   ?? null,
+            $body['town']        ?? null,
+            $body['region']      ?? null,
+            $body['eircode']     ?? null,
             isset($body['is_cash_sale']) ? (int)(bool)$body['is_cash_sale'] : 0,
+            $body['notes']       ?? null,
         ]);
         $newId = (int)$pdo->lastInsertId();
 
@@ -107,8 +106,7 @@ try {
         $stmt->execute([$newId]);
         $customer = $stmt->fetch();
 
-        auditLog($pdo, (int)$auth['user_id'], $auth['username'],
-            $customer['store_id'] ?? null,
+        auditLog($pdo, (int)$auth['user_id'], $auth['username'], null,
             'create', 'customer', $newId, null, $customer);
 
         jsonResponse(['success' => true, 'data' => $customer], 201);
@@ -123,7 +121,7 @@ try {
             jsonResponse(['success' => false, 'error' => 'id parameter required'], 422);
         }
 
-        $stmt = $pdo->prepare('SELECT * FROM customers WHERE id = ? AND deleted_at IS NULL');
+        $stmt = $pdo->prepare('SELECT * FROM customers WHERE id = ?');
         $stmt->execute([$id]);
         $old = $stmt->fetch();
         if (!$old) {
@@ -134,23 +132,31 @@ try {
 
         $pdo->prepare(
             'UPDATE customers
-             SET name         = COALESCE(?, name),
-                 email        = COALESCE(?, email),
-                 telephone    = COALESCE(?, telephone),
-                 address      = COALESCE(?, address),
-                 vat_number   = COALESCE(?, vat_number),
-                 credit_limit = COALESCE(?, credit_limit),
+             SET name        = COALESCE(?, name),
+                 email       = COALESCE(?, email),
+                 telephone   = COALESCE(?, telephone),
+                 address_1   = COALESCE(?, address_1),
+                 address_2   = COALESCE(?, address_2),
+                 address_3   = COALESCE(?, address_3),
+                 town        = COALESCE(?, town),
+                 region      = COALESCE(?, region),
+                 eircode     = COALESCE(?, eircode),
                  is_cash_sale = COALESCE(?, is_cash_sale),
-                 updated_at   = NOW()
+                 notes       = COALESCE(?, notes),
+                 updated_at  = NOW()
              WHERE id = ?'
         )->execute([
             $body['name']         ?? null,
             $body['email']        ?? null,
             $body['telephone']    ?? null,
-            $body['address']      ?? null,
-            $body['vat_number']   ?? null,
-            isset($body['credit_limit']) ? (float)$body['credit_limit'] : null,
+            $body['address_1']    ?? null,
+            $body['address_2']    ?? null,
+            $body['address_3']    ?? null,
+            $body['town']         ?? null,
+            $body['region']       ?? null,
+            $body['eircode']      ?? null,
             isset($body['is_cash_sale']) ? (int)(bool)$body['is_cash_sale'] : null,
+            $body['notes']        ?? null,
             $id,
         ]);
 
@@ -158,15 +164,15 @@ try {
         $stmt->execute([$id]);
         $new = $stmt->fetch();
 
-        auditLog($pdo, (int)$auth['user_id'], $auth['username'],
-            $old['store_id'] ?? null,
+        auditLog($pdo, (int)$auth['user_id'], $auth['username'], null,
             'update', 'customer', $id, $old, $new);
 
         jsonResponse(['success' => true, 'data' => $new]);
     }
 
     // ════════════════════════════════════════════════════════════════════════
-    // DELETE — prevent if has invoices, otherwise soft-delete
+    // DELETE — prevent if has non-cancelled invoices, otherwise hard delete
+    // (schema has no deleted_at column on customers)
     // ════════════════════════════════════════════════════════════════════════
     if ($method === 'DELETE') {
         $id = (int)($_GET['id'] ?? 0);
@@ -174,7 +180,7 @@ try {
             jsonResponse(['success' => false, 'error' => 'id parameter required'], 422);
         }
 
-        $stmt = $pdo->prepare('SELECT * FROM customers WHERE id = ? AND deleted_at IS NULL');
+        $stmt = $pdo->prepare('SELECT * FROM customers WHERE id = ?');
         $stmt->execute([$id]);
         $old = $stmt->fetch();
         if (!$old) {
@@ -192,10 +198,9 @@ try {
             ], 409);
         }
 
-        $pdo->prepare('UPDATE customers SET deleted_at = NOW() WHERE id = ?')->execute([$id]);
+        $pdo->prepare('DELETE FROM customers WHERE id = ?')->execute([$id]);
 
-        auditLog($pdo, (int)$auth['user_id'], $auth['username'],
-            $old['store_id'] ?? null,
+        auditLog($pdo, (int)$auth['user_id'], $auth['username'], null,
             'delete', 'customer', $id, $old, null);
 
         jsonResponse(['success' => true, 'message' => 'Customer deleted']);

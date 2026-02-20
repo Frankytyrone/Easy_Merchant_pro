@@ -13,12 +13,10 @@ $auth        = null;
 try {
     $pdo = getDb();
 
-    // Check for cron secret from settings table
-    $stmt = $pdo->prepare("SELECT value FROM settings WHERE name = 'cron_secret' LIMIT 1");
-    $stmt->execute();
-    $row = $stmt->fetch();
-    if ($row && !empty($row['value']) && hash_equals($row['value'], $cronSecret)) {
-        // Cron-authenticated — create a minimal pseudo-auth array
+    // Check for cron secret — settings table is column-based (no key-value).
+    // Cron secret stored as env var or X-Cron-Secret header matched against a
+    // static constant defined in config (APP_SECRET reused for cron).
+    if (!empty($cronSecret) && hash_equals(APP_SECRET, $cronSecret)) {
         $auth = ['user_id' => 0, 'username' => 'cron', 'role' => 'cron', 'store_id' => null];
     }
 } catch (Throwable $e) {
@@ -40,11 +38,11 @@ try {
 
         $stmt = $pdo->prepare(
             "SELECT i.id, i.invoice_number, i.invoice_date, i.due_date,
-                    i.total, i.balance, i.currency, i.last_reminder_sent_at,
+                    i.total, i.balance, i.email_sent_at,
                     c.id AS customer_id, c.name AS customer_name, c.email AS customer_email
              FROM invoices i
              JOIN customers c ON c.id = i.customer_id
-             WHERE i.status IN ('pending','part_paid')
+             WHERE i.status IN ('sent','part_paid')
                AND i.balance > 0
                AND i.due_date < ?
              ORDER BY i.due_date ASC"
@@ -86,8 +84,8 @@ try {
         $message = 'Dear ' . htmlspecialchars($invoice['customer_name'], ENT_QUOTES, 'UTF-8') . ",\n\n"
             . "This is a friendly reminder that invoice " . $invoice['invoice_number']
             . " dated " . $invoice['invoice_date']
-            . " has an outstanding balance of " . $invoice['currency']
-            . ' ' . number_format((float)$invoice['balance'], 2)
+            . " has an outstanding balance of "
+            . number_format((float)$invoice['balance'], 2)
             . ".\n\nPlease arrange payment at your earliest convenience.\n\nThank you.";
 
         $result = sendEmail($pdo, [
@@ -99,12 +97,9 @@ try {
         ]);
 
         if ($result['success']) {
-            $pdo->prepare(
-                'UPDATE invoices SET last_reminder_sent_at = NOW() WHERE id = ?'
-            )->execute([$invoiceId]);
-
+            // Log reminder send via audit_log (invoice has email_sent_at for general email tracking)
             auditLog($pdo, (int)$auth['user_id'], $auth['username'],
-                (int)($invoice['store_id'] ?? 0),
+                $invoice['created_store_context'] ?? null,
                 'reminder_sent', 'invoice', $invoiceId,
                 null, ['to_email' => $invoice['customer_email']]);
         }

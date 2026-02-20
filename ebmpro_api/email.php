@@ -32,13 +32,19 @@ function sendEmail(PDO $pdo, array $params): array
         return ['success' => false, 'error' => 'subject is required'];
     }
 
-    // ── Load SMTP settings from DB ─────────────────────────────────────────
-    $stmt = $pdo->query("SELECT name, value FROM settings WHERE name LIKE 'smtp_%'");
-    $rows = $stmt->fetchAll();
-    $smtp = [];
-    foreach ($rows as $row) {
-        $smtp[$row['name']] = $row['value'];
-    }
+    // ── Load SMTP settings from DB (single-row settings table, column-based) ─
+    $stmt = $pdo->query(
+        'SELECT smtp_host, smtp_port, smtp_user, smtp_pass, smtp_from_name FROM settings LIMIT 1'
+    );
+    $smtpRow = $stmt->fetch() ?: [];
+    $smtp = [
+        'smtp_host'       => $smtpRow['smtp_host']      ?? 'localhost',
+        'smtp_port'       => (int)($smtpRow['smtp_port'] ?? 587),
+        'smtp_user'       => $smtpRow['smtp_user']      ?? '',
+        'smtp_pass'       => $smtpRow['smtp_pass']      ?? '',
+        'smtp_from_name'  => $smtpRow['smtp_from_name'] ?? 'Easy Merchant Pro',
+        'smtp_from_email' => null,
+    ];
 
     // ── Generate tracking token ────────────────────────────────────────────
     $trackingToken = bin2hex(random_bytes(16));
@@ -63,15 +69,15 @@ function sendEmail(PDO $pdo, array $params): array
 
     try {
         $mail->isSMTP();
-        $mail->Host       = $smtp['smtp_host']     ?? 'localhost';
-        $mail->Port       = (int)($smtp['smtp_port'] ?? 587);
+        $mail->Host       = $smtp['smtp_host'];
+        $mail->Port       = $smtp['smtp_port'];
         $mail->SMTPAuth   = !empty($smtp['smtp_user']);
-        $mail->Username   = $smtp['smtp_user']     ?? '';
-        $mail->Password   = $smtp['smtp_pass']     ?? '';
-        $mail->SMTPSecure = $smtp['smtp_secure']   ?? 'tls';
+        $mail->Username   = $smtp['smtp_user'];
+        $mail->Password   = $smtp['smtp_pass'];
+        $mail->SMTPSecure = 'tls';
 
         $fromEmail = $smtp['smtp_from_email'] ?? ('noreply@' . $domain);
-        $fromName  = $smtp['smtp_from_name']  ?? 'Easy Merchant Pro';
+        $fromName  = $smtp['smtp_from_name'];
 
         $mail->setFrom($fromEmail, $fromName);
         $mail->addAddress($toEmail);
@@ -82,15 +88,14 @@ function sendEmail(PDO $pdo, array $params): array
         $mail->CharSet  = 'UTF-8';
 
         $mail->send();
-        $messageId = $mail->getLastMessageID();
 
-        // ── Log to email_log ───────────────────────────────────────────────
+        // ── Log to email_log (schema: no message_id column) ───────────────────
         $logStmt = $pdo->prepare(
             'INSERT INTO email_log
-             (invoice_id, to_email, subject, type, tracking_token, message_id, sent_at)
-             VALUES (?,?,?,?,?,?,NOW())'
+             (invoice_id, to_email, subject, type, tracking_token, sent_at, status)
+             VALUES (?,?,?,?,?,NOW(),?)'
         );
-        $logStmt->execute([$invoiceId, $toEmail, $subject, $type, $trackingToken, $messageId]);
+        $logStmt->execute([$invoiceId, $toEmail, $subject, $type, $trackingToken, 'sent']);
 
         // ── Update invoice record ──────────────────────────────────────────
         if ($invoiceId) {
@@ -99,7 +104,7 @@ function sendEmail(PDO $pdo, array $params): array
             )->execute([$trackingToken, $invoiceId]);
         }
 
-        return ['success' => true, 'message_id' => $messageId, 'tracking_token' => $trackingToken];
+        return ['success' => true, 'tracking_token' => $trackingToken];
 
     } catch (PHPMailer\PHPMailer\Exception $e) {
         error_log('email.php mailer error: ' . $e->getMessage());

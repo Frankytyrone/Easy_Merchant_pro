@@ -40,11 +40,11 @@ $ipAddress = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
 try {
     $pdo = getDb();
 
-    // ── Rate limiting: max 5 failed attempts per IP per 15-minute window ─────
+    // ── Rate limiting: max 5 attempts per IP per 15-minute window ─────────────
     $window = date('Y-m-d H:i:s', strtotime('-15 minutes'));
     $stmt   = $pdo->prepare(
         'SELECT COUNT(*) FROM login_attempts
-         WHERE ip_address = ? AND attempted_at > ? AND success = 0'
+         WHERE ip_address = ? AND attempted_at > ?'
     );
     $stmt->execute([$ipAddress, $window]);
     $attempts = (int) $stmt->fetchColumn();
@@ -58,21 +58,22 @@ try {
 
     // ── Fetch user ────────────────────────────────────────────────────────────
     $stmt = $pdo->prepare(
-        'SELECT id, username, password_hash, full_name, role, store_id, is_active
+        'SELECT id, username, password_hash, full_name, role, store_id, active
          FROM users WHERE username = ? LIMIT 1'
     );
     $stmt->execute([$username]);
     $user = $stmt->fetch();
 
-    $success = $user && (int) $user['is_active'] === 1
+    $success = $user && (int) $user['active'] === 1
         && password_verify($password, $user['password_hash']);
 
-    // ── Log attempt ───────────────────────────────────────────────────────────
-    $logStmt = $pdo->prepare(
-        'INSERT INTO login_attempts (ip_address, username, success, attempted_at)
-         VALUES (?, ?, ?, NOW())'
-    );
-    $logStmt->execute([$ipAddress, $username, $success ? 1 : 0]);
+    // ── Log attempt (schema only stores ip_address + timestamp) ───────────────
+    if (!$success) {
+        $logStmt = $pdo->prepare(
+            'INSERT INTO login_attempts (ip_address, attempted_at) VALUES (?, NOW())'
+        );
+        $logStmt->execute([$ipAddress]);
+    }
 
     if (!$success) {
         jsonResponse(['success' => false, 'error' => 'Invalid credentials'], 401);
