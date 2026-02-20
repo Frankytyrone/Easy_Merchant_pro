@@ -98,7 +98,7 @@ foreach ($invoices as $invoice) {
   <p>If you have any queries regarding this invoice, please do not hesitate to contact us.</p>
   <p>Thank you for your business.</p>
   <div class='footer'>This is an automated reminder from Easy Builders Merchant Pro.</div>
-  <img src='" . (isset($settings['app_url']) ? rtrim($settings['app_url'], '/') : '') . "/track/open.php?t={$token}' width='1' height='1' alt='' style='display:none;' />
+  <img src='" . (defined('APP_URL') ? rtrim(APP_URL, '/') : '') . "/track/open.php?t={$token}' width='1' height='1' alt='' style='display:none;' />
 </div>
 </body>
 </html>";
@@ -110,11 +110,11 @@ foreach ($invoices as $invoice) {
         $mail->SMTPAuth   = true;
         $mail->Username   = $settings['smtp_user']       ?? '';
         $mail->Password   = $settings['smtp_pass']       ?? '';
-        $mail->SMTPSecure = $settings['smtp_secure']     ?? PHPMailer::ENCRYPTION_STARTTLS;
+        $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
         $mail->Port       = (int)($settings['smtp_port'] ?? 587);
 
-        $fromEmail = $settings['from_email'] ?? $settings['smtp_user'] ?? '';
-        $fromName  = $settings['from_name']  ?? 'Easy Builders Merchant Pro';
+        $fromEmail = $settings['smtp_user']      ?? '';
+        $fromName  = $settings['smtp_from_name'] ?? 'Easy Builders Merchant Pro';
         $mail->setFrom($fromEmail, $fromName);
         $mail->addAddress($recipientEmail, $recipientName);
 
@@ -127,7 +127,7 @@ foreach ($invoices as $invoice) {
 
         // Log in email_log
         $pdo->prepare("
-            INSERT INTO email_log (invoice_id, type, sent_to, subject, tracking_token, sent_at, status)
+            INSERT INTO email_log (invoice_id, type, to_email, subject, tracking_token, sent_at, status)
             VALUES (?, 'reminder', ?, ?, ?, NOW(), 'sent')
         ")->execute([$invoice['id'], $recipientEmail, $subject, $token]);
 
