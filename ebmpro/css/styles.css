@@ -5,8 +5,8 @@
 
 /* ── Custom Properties ──────────────────────────────────────── */
 :root {
-  --primary:     #1a3a5c;
-  --primary-dk:  #122843;
+  --primary:     #1a5c38;
+  --primary-dk:  #0f3d25;
   --accent:      #e8861a;
   --accent-dk:   #c97115;
   --success:     #27ae60;
@@ -42,7 +42,7 @@
   body { background: #141921; color: #e2e8f0; }
   .card, .modal-card { background: #1e2530; }
   input, select, textarea { background: #2a3344; color: #e2e8f0; border-color: #2d3748; }
-  table thead { background: #1a3a5c; }
+  table thead { background: #1a5c38; }
   .invoice-table tbody tr:hover { background: rgba(255,255,255,.04); }
   .dropdown-list { background: #1e2530; border-color: #2d3748; }
   .dropdown-item:hover, .dropdown-item.active { background: #2a3344; }
@@ -885,5 +885,5 @@ textarea.form-control { min-height: 80px; resize: vertical; }
   .card { box-shadow: none; border: 1px solid #ddd; page-break-inside: avoid; }
 
   .invoice-table { min-width: auto; font-size: .8rem; }
-  .invoice-table th { background: #1a3a5c !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .invoice-table th { background: #1a5c38 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
