@@ -180,61 +180,47 @@ function runInstall(array $d): array
         }
     }
 
-    // 3. Insert/update settings row
+    // 3. Insert/update settings (key-value table)
     $prefixFal = strtoupper(substr(preg_replace('/[^A-Z0-9]/i', '', $d['invoice_prefix_falcarragh'] ?? 'FAL'), 0, 10)) ?: 'FAL';
     $prefixGwe = strtoupper(substr(preg_replace('/[^A-Z0-9]/i', '', $d['invoice_prefix_gweedore']   ?? 'GWE'), 0, 10)) ?: 'GWE';
 
-    $stmtSettings = $pdo->prepare("
-        INSERT INTO settings
-            (shop_name, address_1, address_2, town, county, eircode, phone, email, vat_no,
-             smtp_host, smtp_port, smtp_user, smtp_pass, smtp_from_name,
-             invoice_prefix_falcarragh, invoice_prefix_gweedore)
-        VALUES
-            (:shop_name, :address_1, :address_2, :town, :county, :eircode, :phone, :email, :vat_no,
-             :smtp_host, :smtp_port, :smtp_user, :smtp_pass, :smtp_from_name,
-             :prefix_fal, :prefix_gwe)
-        ON DUPLICATE KEY UPDATE
-            shop_name = VALUES(shop_name),
-            address_1 = VALUES(address_1),
-            address_2 = VALUES(address_2),
-            town = VALUES(town),
-            county = VALUES(county),
-            eircode = VALUES(eircode),
-            phone = VALUES(phone),
-            email = VALUES(email),
-            vat_no = VALUES(vat_no),
-            smtp_host = VALUES(smtp_host),
-            smtp_port = VALUES(smtp_port),
-            smtp_user = VALUES(smtp_user),
-            smtp_pass = VALUES(smtp_pass),
-            smtp_from_name = VALUES(smtp_from_name),
-            invoice_prefix_falcarragh = VALUES(invoice_prefix_falcarragh),
-            invoice_prefix_gweedore = VALUES(invoice_prefix_gweedore)
-    ");
-    $stmtSettings->execute([
-        ':shop_name'   => $d['shop_name']   ?? '',
-        ':address_1'   => $d['address_1']   ?? '',
-        ':address_2'   => $d['address_2']   ?? '',
-        ':town'        => $d['town']        ?? '',
-        ':county'      => $d['county']      ?? '',
-        ':eircode'     => $d['eircode']     ?? '',
-        ':phone'       => $d['phone']       ?? '',
-        ':email'       => $d['email']       ?? '',
-        ':vat_no'      => $d['vat_no']      ?? '',
-        ':smtp_host'   => $d['smtp_host']   ?? '',
-        ':smtp_port'   => $d['smtp_port']   ?? 587,
-        ':smtp_user'   => $d['smtp_user']   ?? '',
-        ':smtp_pass'   => $d['smtp_pass']   ?? '',
-        ':smtp_from_name' => $d['smtp_from_name'] ?? '',
-        ':prefix_fal'  => $prefixFal,
-        ':prefix_gwe'  => $prefixGwe,
-    ]);
+    $settingsData = [
+        'shop_name'           => $d['shop_name']      ?? '',
+        'address_1'           => $d['address_1']      ?? '',
+        'address_2'           => $d['address_2']      ?? '',
+        'town'                => $d['town']            ?? '',
+        'county'              => $d['county']          ?? '',
+        'eircode'             => $d['eircode']         ?? '',
+        'phone'               => $d['phone']           ?? '',
+        'email'               => $d['email']           ?? '',
+        'vat_no'              => $d['vat_no']          ?? '',
+        'smtp_host'           => $d['smtp_host']       ?? '',
+        'smtp_port'           => $d['smtp_port']       ?? 587,
+        'smtp_user'           => $d['smtp_user']       ?? '',
+        'smtp_pass'           => $d['smtp_pass']       ?? '',
+        'smtp_from_name'      => $d['smtp_from_name']  ?? '',
+        'invoice_prefix_FAL'  => $prefixFal,
+        'invoice_prefix_GWE'  => $prefixGwe,
+    ];
+    $stmtSettings = $pdo->prepare(
+        'INSERT INTO settings (`key`, value) VALUES (?, ?)
+         ON DUPLICATE KEY UPDATE value = VALUES(value)'
+    );
+    foreach ($settingsData as $k => $v) {
+        $stmtSettings->execute([$k, (string)$v]);
+    }
+
+    // Update stores table with configured prefixes
+    $pdo->prepare("UPDATE stores SET invoice_prefix = ?, quote_prefix = ? WHERE code = 'FAL'")
+        ->execute([$prefixFal, $prefixFal]);
+    $pdo->prepare("UPDATE stores SET invoice_prefix = ?, quote_prefix = ? WHERE code = 'GWE'")
+        ->execute([$prefixGwe, $prefixGwe]);
 
     // 4. Create admin user (skip if exists)
     $hash = password_hash('Easy2026!', PASSWORD_BCRYPT);
     $stmtUser = $pdo->prepare("
-        INSERT IGNORE INTO users (username, password_hash, full_name, role, active)
-        VALUES ('admin', :hash, 'Administrator', 'admin', 1)
+        INSERT IGNORE INTO users (username, password_hash, role, active)
+        VALUES ('admin', :hash, 'admin', 1)
     ");
     $stmtUser->execute([':hash' => $hash]);
 

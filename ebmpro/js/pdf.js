@@ -109,15 +109,17 @@ const PDF = (() => {
     doc.setFontSize(9);
     doc.setFont('helvetica', 'normal');
     const custAddr = [
-      invoice.customer_address1,
-      invoice.customer_address2,
-      invoice.customer_town,
-      invoice.customer_county,
-      invoice.customer_eircode
+      invoice.customer_address1  || invoice.address_1,
+      invoice.customer_address2  || invoice.address_2,
+      invoice.customer_town      || invoice.inv_town,
+      invoice.customer_county    || invoice.inv_region,
+      invoice.customer_eircode   || invoice.inv_postcode
     ].filter(Boolean);
     custAddr.forEach(line => { doc.text(line, marginL, y); y += 5; });
-    if (invoice.customer_phone) { doc.text(invoice.customer_phone, marginL, y); y += 5; }
-    if (invoice.customer_email) { doc.text(invoice.customer_email, marginL, y); y += 5; }
+    const custPhone = invoice.customer_phone || invoice.inv_telephone;
+    const custEmail = invoice.customer_email || invoice.email_address;
+    if (custPhone) { doc.text(custPhone, marginL, y); y += 5; }
+    if (custEmail) { doc.text(custEmail, marginL, y); y += 5; }
 
     // Delivery address (right side, same top)
     const da = invoice.delivery_address || {};

@@ -176,8 +176,7 @@ async function flushOfflineQueue() {
       });
       if (record) {
         record.processed = true;
-        const wtx2 = db.transaction('offline_queue', 'readwrite');
-        wtx2.objectStore('offline_queue').put(record);
+        wtx.objectStore('offline_queue').put(record);
       }
     } catch {
       break; // Still offline, stop trying

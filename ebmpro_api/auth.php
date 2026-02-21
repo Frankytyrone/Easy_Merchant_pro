@@ -58,7 +58,7 @@ try {
 
     // ── Fetch user ────────────────────────────────────────────────────────────
     $stmt = $pdo->prepare(
-        'SELECT id, username, password_hash, full_name, role, store_id, active
+        'SELECT id, username, password_hash, role, store_id, active
          FROM users WHERE username = ? LIMIT 1'
     );
     $stmt->execute([$username]);
@@ -95,7 +95,6 @@ try {
         'user'    => [
             'id'        => (int) $user['id'],
             'username'  => $user['username'],
-            'full_name' => $user['full_name'],
             'role'      => $user['role'],
             'store_id'  => $user['store_id'] !== null ? (int) $user['store_id'] : null,
         ],
