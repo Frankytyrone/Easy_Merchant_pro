@@ -15,8 +15,8 @@ try {
 
     // Check for cron secret — settings table is column-based (no key-value).
     // Cron secret stored as env var or X-Cron-Secret header matched against a
-    // static constant defined in config (APP_SECRET reused for cron).
-    if (!empty($cronSecret) && hash_equals(APP_SECRET, $cronSecret)) {
+    // static constant defined in config (JWT_SECRET reused for cron).
+    if (!empty($cronSecret) && hash_equals(JWT_SECRET, $cronSecret)) {
         $auth = ['user_id' => 0, 'username' => 'cron', 'role' => 'cron', 'store_id' => null];
     }
 } catch (Throwable $e) {

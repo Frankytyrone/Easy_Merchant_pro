@@ -254,12 +254,24 @@ function runInstall(array $d): array
     $ePass   = var_export($d['db_pass'], true);
     $eSecret = var_export($secret, true);
     $configContent = "<?php\n"
+        . "define('SITE_URL', 'https://shanemcgee.biz');\n"
+        . "define('APP_PATH', '/ebmpro/');\n"
+        . "define('API_PATH', '/ebmpro_api/');\n"
+        . "define('TRACK_URL', 'https://shanemcgee.biz/track/open.php');\n"
+        . "define('JWT_SECRET', {$eSecret});\n"
         . "define('DB_HOST', {$eHost});\n"
         . "define('DB_NAME', {$eName});\n"
         . "define('DB_USER', {$eUser});\n"
         . "define('DB_PASS', {$ePass});\n"
-        . "define('APP_SECRET', {$eSecret});\n"
-        . "define('INSTALL_DIR', __DIR__);\n";
+        . "try {\n"
+        . "    \$pdo = new PDO('mysql:host='.DB_HOST.';dbname='.DB_NAME.';charset=utf8mb4', DB_USER, DB_PASS, [\n"
+        . "        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,\n"
+        . "        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC\n"
+        . "    ]);\n"
+        . "} catch (PDOException \$e) {\n"
+        . "    http_response_code(503);\n"
+        . "    die(json_encode(['error' => 'DB unavailable']));\n"
+        . "}\n";
     if (file_put_contents($configPath, $configContent) === false) {
         return ['ok' => false, 'msg' => 'Could not write ebmpro_api/config.php. Check file permissions.'];
     }

@@ -81,7 +81,7 @@ function generateToken(array $payload): string
 {
     $header  = base64UrlEncode(json_encode(['alg' => 'HS256', 'typ' => 'JWT']));
     $body    = base64UrlEncode(json_encode($payload));
-    $sig     = base64UrlEncode(hash_hmac('sha256', $header . '.' . $body, APP_SECRET, true));
+    $sig     = base64UrlEncode(hash_hmac('sha256', $header . '.' . $body, JWT_SECRET, true));
     return $header . '.' . $body . '.' . $sig;
 }
 
@@ -96,7 +96,7 @@ function validateToken(string $token): ?array
         return null;
     }
     [$header, $body, $sig] = $parts;
-    $expected = base64UrlEncode(hash_hmac('sha256', $header . '.' . $body, APP_SECRET, true));
+    $expected = base64UrlEncode(hash_hmac('sha256', $header . '.' . $body, JWT_SECRET, true));
     if (!hash_equals($expected, $sig)) {
         return null;
     }
