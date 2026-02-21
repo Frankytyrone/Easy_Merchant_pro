@@ -840,7 +840,7 @@ elseif ($step === 4):
   <div class="form-cols">
     <div class="form-row">
       <label>SMTP Host</label>
-      <input type="text" name="smtp_host" value="<?= val('smtp_host', 'smtp.example.com') ?>" placeholder="smtp.gmail.com">
+      <input type="text" name="smtp_host" value="<?= val('smtp_host', 'mail.shanemcgee.biz') ?>" placeholder="smtp.gmail.com">
     </div>
     <div class="form-row">
       <label>SMTP Port</label>
@@ -851,7 +851,7 @@ elseif ($step === 4):
   <div class="form-cols">
     <div class="form-row">
       <label>SMTP Username</label>
-      <input type="text" name="smtp_user" value="<?= val('smtp_user') ?>" placeholder="user@example.com" autocomplete="username">
+      <input type="text" name="smtp_user" value="<?= val('smtp_user') ?>" placeholder="user@shanemcgee.biz" autocomplete="username">
     </div>
     <div class="form-row">
       <label>SMTP Password</label>
