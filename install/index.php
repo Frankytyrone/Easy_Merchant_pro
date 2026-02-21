@@ -840,7 +840,7 @@ elseif ($step === 4):
   <div class="form-cols">
     <div class="form-row">
       <label>SMTP Host</label>
-      <input type="text" name="smtp_host" value="<?= val('smtp_host', 'smtp.example.com') ?>" placeholder="smtp.gmail.com">
+      <input type="text" name="smtp_host" value="<?= val('smtp_host', 'mail.shanemcgee.biz') ?>" placeholder="smtp.gmail.com">
     </div>
     <div class="form-row">
       <label>SMTP Port</label>
@@ -851,7 +851,7 @@ elseif ($step === 4):
   <div class="form-cols">
     <div class="form-row">
       <label>SMTP Username</label>
-      <input type="text" name="smtp_user" value="<?= val('smtp_user') ?>" placeholder="user@example.com" autocomplete="username">
+      <input type="text" name="smtp_user" value="<?= val('smtp_user') ?>" placeholder="info@shanemcgee.biz" autocomplete="username">
     </div>
     <div class="form-row">
       <label>SMTP Password</label>
@@ -867,7 +867,7 @@ elseif ($step === 4):
   <div class="form-row">
     <label>Send test email to</label>
     <div class="test-row">
-      <input type="email" id="test_email_addr" placeholder="you@example.com">
+      <input type="email" id="test_email_addr" placeholder="you@shanemcgee.biz">
       <button type="button" class="btn btn-outline btn-sm" onclick="testSmtp()">&#9993;&#65039; Send Test</button>
     </div>
     <div id="smtp-test-result"></div>
