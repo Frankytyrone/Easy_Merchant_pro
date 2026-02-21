@@ -1,137 +1,962 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Easy Builders Merchant Pro</title>
-    <meta name="application-name" content="Easy Builders Merchant Pro">
-    <meta name="theme-color" content="#1a3a5c">
-    <link rel="canonical" href="https://shanemcgee.biz/ebmpro/">
-    <link rel="manifest" href="/ebmpro/manifest.json">
-    <link rel="stylesheet" href="/ebmpro/css/styles.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#1a3a5c">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="EBM Pro">
+  <meta name="description" content="Invoicing system for Easy Builders Merchant - Falcarragh &amp; Gweedore">
+  <title>Easy Builders Merchant Pro</title>
+  <link rel="manifest" href="/ebmpro/manifest.json">
+  <link rel="stylesheet" href="/ebmpro/css/styles.css">
+  <!-- jsPDF (self-hosted to avoid CDN supply-chain risk) -->
+  <script src="/ebmpro/vendor/jspdf.umd.min.js" defer></script>
+  <script src="/ebmpro/vendor/jspdf.plugin.autotable.min.js" defer></script>
 </head>
 <body>
-    <div id="app" class="app">
-        <header class="header">
-            <div class="header-left">
-                <h1>📋 EBMP</h1>
-            </div>
-            <div class="header-center">
-                <div class="store-selector">
-                    <label>STORE:</label>
-                    <select id="storeSelect" onchange="switchStore(this.value)">
-                        <option value="falcarragh">Falcarragh</option>
-                        <option value="gweedore">Gweedore</option>
-                    </select>
-                </div>
-            </div>
-            <div class="header-right">
-                <button class="btn-icon" onclick="toggleMenu()" title="Menu">⋮</button>
-            </div>
-        </header>
 
-        <main class="main-content">
-            <section id="invoiceScreen" class="screen active">
-                <div class="screen-title">New Invoice</div>
-                
-                <div class="form-group">
-                    <label>Customer</label>
-                    <input type="text" id="customerSearch" placeholder="Search customer..." autocomplete="off" autofocus>
-                    <div id="customerList" class="dropdown-list"></div>
-                    <button class="btn-secondary" onclick="showAddCustomer()">+ New Customer</button>
-                </div>
+<!-- ═══════════════════════════════════════════════════════════
+     TOAST CONTAINER
+════════════════════════════════════════════════════════════ -->
+<div id="toastContainer" class="toast-container" aria-live="polite"></div>
 
-                <div class="form-group">
-                    <label>Search Products</label>
-                    <input type="text" id="productSearch" placeholder="Search by code/description..." autocomplete="off">
-                    <div id="productList" class="dropdown-list"></div>
-                </div>
+<!-- ═══════════════════════════════════════════════════════════
+     HEADER
+════════════════════════════════════════════════════════════ -->
+<header id="appHeader" role="banner">
+  <span class="brand">📋 <span>Easy Builders</span> Merchant Pro</span>
 
-                <table class="invoice-table" id="invoiceItemsTable">
-                    <thead>
-                        <tr>
-                            <th>Code</th>
-                            <th>Description</th>
-                            <th>Qty</th>
-                            <th>Price</th>
-                            <th>VAT%</th>
-                            <th>Total</th>
-                            <th></th>
-                        </tr>
-                    </thead>
-                    <tbody id="itemsBody">
-                        <tr class="empty-row"><td colspan="7" style="text-align:center;color:#999;">No items added yet</td></tr>
-                    </tbody>
-                </table>
+  <div class="header-controls">
+    <select id="storeSelect" aria-label="Store selector">
+      <option value="falcarragh">Falcarragh</option>
+      <option value="gweedore">Gweedore</option>
+    </select>
 
-                <div class="invoice-totals">
-                    <div class="total-row">
-                        <span>Subtotal</span>
-                        <span id="subtotal">€0.00</span>
-                    </div>
-                    <div class="total-row">
-                        <span>VAT</span>
-                        <span id="vat">€0.00</span>
-                    </div>
-                    <div class="total-row total-large">
-                        <span>TOTAL</span>
-                        <span id="total">€0.00</span>
-                    </div>
-                </div>
+    <span id="onlineStatus" class="online" role="status" aria-live="polite">🟢 Online</span>
 
-                <div class="button-group">
-                    <button class="btn-primary" onclick="saveInvoice()">💾 Save Invoice</button>
-                    <button class="btn-secondary" onclick="printInvoice()">🖨️ Print</button>
-                    <button class="btn-secondary" onclick="emailInvoice()">📧 Email</button>
-                </div>
-            </section>
+    <div class="header-user">
+      <button id="headerUserBtn" onclick="App.toggleMenu()" aria-haspopup="true" aria-expanded="false" aria-label="User menu">
+        <span id="headerUserName">Loading…</span>
+      </button>
+      <div id="userDropdown" class="user-dropdown hidden" role="menu">
+        <button role="menuitem" onclick="App.showScreen('settingsScreen'); App.closeModal('userDropdown')">⚙️ Settings</button>
+        <button role="menuitem" onclick="App.showAuditLog(); App.showScreen('settingsScreen');">📋 Audit Log</button>
+        <button role="menuitem" onclick="App.logout()">🚪 Logout</button>
+      </div>
+    </div>
+  </div>
+</header>
 
-            <section id="listScreen" class="screen">
-                <div class="screen-title">Invoices</div>
-                <div id="invoiceListContainer" style="padding:20px;">Loading...</div>
-            </section>
+<!-- ═══════════════════════════════════════════════════════════
+     LEFT SIDEBAR (desktop only)
+════════════════════════════════════════════════════════════ -->
+<nav id="sidebar" role="navigation" aria-label="Main navigation">
+  <div class="sidebar-nav">
+    <button class="active" data-screen="invoiceScreen" onclick="App.showScreen('invoiceScreen'); Invoice.newInvoice()">
+      <span class="icon">➕</span> New Invoice
+    </button>
+    <button data-screen="listScreen" onclick="App.showScreen('listScreen')">
+      <span class="icon">📄</span> Invoices
+    </button>
+    <button data-screen="customersScreen" onclick="App.showScreen('customersScreen')">
+      <span class="icon">👤</span> Customers
+    </button>
+    <button data-screen="productsScreen" class="admin-only" data-screen="productsScreen" onclick="App.showScreen('productsScreen')">
+      <span class="icon">📦</span> Products
+    </button>
+    <hr class="sidebar-divider">
+    <button data-screen="reportsScreen" onclick="App.showScreen('reportsScreen')">
+      <span class="icon">📊</span> Reports
+    </button>
+    <button data-screen="settingsScreen" class="admin-only" onclick="App.showScreen('settingsScreen')">
+      <span class="icon">⚙️</span> Settings
+    </button>
+  </div>
+</nav>
 
-            <section id="menuScreen" class="screen">
-                <div class="screen-title">Menu</div>
-                <div class="menu-list">
-                    <button class="menu-item" onclick="showScreen('invoiceScreen')">📋 New Invoice</button>
-                    <button class="menu-item" onclick="showScreen('listScreen'); loadInvoices()">📂 View Invoices</button>
-                    <button class="menu-item" onclick="logout()">🚪 Logout</button>
-                </div>
-            </section>
-        </main>
+<!-- ═══════════════════════════════════════════════════════════
+     MAIN CONTENT
+════════════════════════════════════════════════════════════ -->
+<main id="mainContent" role="main">
 
-        <div id="addCustomerModal" class="modal">
-            <div class="modal-content">
-                <h2>Add New Customer</h2>
-                <input type="text" id="custName" placeholder="Customer Name" autofocus>
-                <input type="email" id="custEmail" placeholder="Email">
-                <input type="tel" id="custPhone" placeholder="Phone">
-                <input type="text" id="custAddress" placeholder="Address">
-                <input type="text" id="custTown" placeholder="Town/City">
-                <input type="text" id="custCounty" placeholder="County">
-                <div style="display:flex;gap:10px;margin-top:20px;">
-                    <button class="btn-primary" onclick="saveCustomer()">Save</button>
-                    <button class="btn-secondary" onclick="closeModal('addCustomerModal')">Cancel</button>
-                </div>
-            </div>
-        </div>
+  <!-- ──────────────────────────────────────────────────────────
+       SCREEN 1: Invoice / Quote Editor
+  ─────────────────────────────────────────────────────────── -->
+  <section id="invoiceScreen" class="screen active" aria-label="Invoice editor">
 
-        <div id="loginModal" class="modal active">
-            <div class="modal-content" style="max-width:400px;">
-                <h2>Login</h2>
-                <input type="text" id="username" placeholder="Username" autofocus>
-                <input type="password" id="password" placeholder="Password">
-                <button class="btn-primary" onclick="login()" style="margin-top:20px;width:100%;">Sign In</button>
-                <p style="text-align:center;margin-top:20px;font-size:12px;color:#666;">Default: admin / Easy2026!</p>
-                <div id="loginError" style="color:red;margin-top:10px;display:none;"></div>
-            </div>
-        </div>
+    <!-- Invoice header row -->
+    <div class="flex justify-between items-center mb-2">
+      <div>
+        <h2 style="margin:0">
+          <span id="invoiceTypeLabel">Invoice</span>
+          <span class="text-muted" style="font-weight:400"> #<span id="invoiceNumberDisplay">new</span></span>
+        </h2>
+      </div>
+      <div class="type-toggle" role="group" aria-label="Document type">
+        <button data-type="invoice" class="active" onclick="Invoice.setInvoiceType('invoice')">Invoice</button>
+        <button data-type="quote"   onclick="Invoice.setInvoiceType('quote')">Quote</button>
+      </div>
     </div>
 
-    <script src="/ebmpro/js/db.js"></script>
-    <script src="/ebmpro/js/api.js"></script>
-    <script src="/ebmpro/js/invoice.js"></script>
-    <script src="/ebmpro/js/app.js"></script>
+    <!-- Customer Search -->
+    <div class="card">
+      <div class="form-row col-2">
+        <div class="form-group" style="position:relative">
+          <label class="form-label" for="customerSearch">Customer *</label>
+          <div class="customer-search-wrap" style="position:relative">
+            <input
+              type="search"
+              id="customerSearch"
+              class="form-control"
+              placeholder="Search customer name, phone or email…"
+              autocomplete="off"
+              autofocus
+              aria-label="Customer search"
+              aria-autocomplete="list"
+            >
+          </div>
+          <div class="btn-row mt-1">
+            <button class="btn btn-sm btn-light" onclick="Invoice.setCustomer({id:null, name:'Cash Sale'})">
+              💵 Cash Sale
+            </button>
+            <button class="btn btn-sm btn-accent" onclick="Customer.showAddCustomerModal({}, c => Invoice.setCustomer(c))">
+              ➕ Add New Customer
+            </button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Invoice Details</label>
+          <div class="form-row col-2">
+            <div>
+              <label class="form-label" for="invoiceDateInput">Invoice Date</label>
+              <input type="date" id="invoiceDateInput" class="form-control" aria-label="Invoice date">
+            </div>
+            <div>
+              <label class="form-label" for="dueDateInput">Due Date</label>
+              <input type="date" id="dueDateInput" class="form-control" aria-label="Due date">
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Product Search & Items Table -->
+    <div class="card">
+      <div class="product-search-wrap mb-2">
+        <input
+          type="search"
+          id="productSearch"
+          class="form-control"
+          placeholder="🔍 Search product code or description to add a line…"
+          autocomplete="off"
+          aria-label="Product search"
+          aria-autocomplete="list"
+        >
+      </div>
+
+      <div class="table-wrap">
+        <table class="invoice-table" id="invoiceItemsTable" aria-label="Invoice line items">
+          <thead>
+            <tr>
+              <th class="col-code">Code</th>
+              <th class="col-desc">Description</th>
+              <th class="col-qty">Qty</th>
+              <th class="col-price">Unit Price</th>
+              <th class="col-disc">Disc%</th>
+              <th class="col-vat">VAT%</th>
+              <th class="col-net">Net</th>
+              <th class="col-vata">VAT</th>
+              <th class="col-total">Total</th>
+              <th class="col-del" aria-label="Delete"></th>
+            </tr>
+          </thead>
+          <tbody id="invoiceItemsTbody">
+            <tr id="emptyItemsRow">
+              <td colspan="10" class="text-center text-muted" style="padding:1.5rem">
+                No items — search for a product above to add lines.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Totals -->
+      <div class="totals-block" id="invoiceTotals" aria-label="Invoice totals">
+        <table class="totals-table">
+          <tr><td>Subtotal (ex VAT)</td><td>€0.00</td></tr>
+          <tr class="total-row"><td>Total</td><td>€0.00</td></tr>
+        </table>
+      </div>
+    </div>
+
+    <!-- Action Buttons -->
+    <div class="btn-row">
+      <button id="btnSaveInvoice" class="btn btn-primary" onclick="App.saveCurrentInvoice()">
+        💾 Save Invoice
+      </button>
+      <button class="btn btn-accent" onclick="App.printCurrentInvoice()">
+        🖨️ Print PDF
+      </button>
+      <button class="btn btn-light" onclick="App.downloadCurrentPDF()">
+        ⬇️ Download PDF
+      </button>
+      <button class="btn btn-light" onclick="App.emailInvoice()">
+        ✉️ Email
+      </button>
+      <button class="btn btn-light" onclick="App.showAddPaymentModal()">
+        💳 Add Payment
+      </button>
+    </div>
+
+    <!-- More Options (collapsible) -->
+    <div class="card mt-3">
+      <div class="collapsible-header" role="button" tabindex="0" aria-expanded="false">
+        <span>📋 More Options</span>
+        <span class="chevron">▼</span>
+      </div>
+      <div class="collapsible-body">
+        <div id="moreOptionsContent" style="padding-top:.75rem">
+          <!-- Convert quote button (shown when type=quote and id exists) -->
+          <div id="convertQuoteSection" class="hidden mb-2">
+            <button class="btn btn-success btn-sm"
+              onclick="Invoice.convertToInvoice(Invoice.getCurrent().id).then(()=>App.showToast('Converted to invoice!','success'))">
+              🔄 Convert Quote to Invoice
+            </button>
+          </div>
+          <p class="text-muted small mb-2">Additional date and reference options</p>
+          <div class="form-row col-2">
+            <div class="form-group">
+              <label class="form-label" for="invoicePORef">Purchase Order Ref</label>
+              <input type="text" id="invoicePORef" class="form-control" placeholder="PO number…" aria-label="PO reference">
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="invoiceJobRef">Job / Site Reference</label>
+              <input type="text" id="invoiceJobRef" class="form-control" placeholder="Job or site reference…" aria-label="Job reference">
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Delivery Address (collapsible) -->
+    <div class="card" id="deliverySection">
+      <div class="collapsible-header" role="button" tabindex="0" aria-expanded="false">
+        <span>🚚 Delivery Address</span>
+        <span class="chevron">▼</span>
+      </div>
+      <div class="collapsible-body">
+        <div style="padding-top:.75rem">
+          <div class="form-group">
+            <label class="form-label" for="deliveryAddress1">Address Line 1</label>
+            <input type="text" id="deliveryAddress1" class="form-control" placeholder="Street / Road" aria-label="Delivery address line 1">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="deliveryAddress2">Address Line 2</label>
+            <input type="text" id="deliveryAddress2" class="form-control" placeholder="Townland / Area" aria-label="Delivery address line 2">
+          </div>
+          <div class="form-row col-3">
+            <div class="form-group">
+              <label class="form-label" for="deliveryTown">Town / Village</label>
+              <input type="text" id="deliveryTown" class="form-control" aria-label="Delivery town">
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="deliveryCounty">County</label>
+              <input type="text" id="deliveryCounty" class="form-control" placeholder="Donegal" aria-label="Delivery county">
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="deliveryEircode">Eircode</label>
+              <input type="text" id="deliveryEircode" class="form-control" placeholder="F94 XXXX" aria-label="Delivery eircode" maxlength="8">
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Notes -->
+    <div class="card">
+      <div class="notes-row">
+        <div class="form-group">
+          <label class="form-label" for="invoiceNotes">Customer Notes</label>
+          <textarea id="invoiceNotes" class="form-control" rows="3"
+            placeholder="Notes printed on invoice…" aria-label="Customer notes"></textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="internalNotes">Internal Notes</label>
+          <textarea id="internalNotes" class="form-control" rows="3"
+            placeholder="Internal notes (not printed)…" aria-label="Internal notes"></textarea>
+        </div>
+      </div>
+    </div>
+
+  </section>
+  <!-- /invoiceScreen -->
+
+  <!-- ──────────────────────────────────────────────────────────
+       SCREEN 2: Invoice List
+  ─────────────────────────────────────────────────────────── -->
+  <section id="listScreen" class="screen" aria-label="Invoices list">
+    <div class="flex justify-between items-center mb-3">
+      <h2>📄 Invoices</h2>
+      <button class="btn btn-primary btn-sm" onclick="Invoice.newInvoice(); App.showScreen('invoiceScreen')">
+        ➕ New Invoice
+      </button>
+    </div>
+
+    <div class="filter-bar">
+      <input
+        type="search"
+        id="invoiceSearchInput"
+        class="form-control"
+        placeholder="Search invoices…"
+        aria-label="Search invoices"
+      >
+      <select id="invoiceStoreFilter" class="form-control" style="width:auto;min-width:130px"
+        onchange="App.loadInvoiceList()" aria-label="Store filter">
+        <option value="">All Stores</option>
+        <option value="falcarragh">Falcarragh</option>
+        <option value="gweedore">Gweedore</option>
+      </select>
+    </div>
+
+    <div class="filter-pills" role="group" aria-label="Status filter">
+      <button class="filter-pill active" data-status="all">All</button>
+      <button class="filter-pill" data-status="draft">Draft</button>
+      <button class="filter-pill" data-status="sent">Sent</button>
+      <button class="filter-pill" data-status="part_paid">Part Paid</button>
+      <button class="filter-pill" data-status="paid">Paid</button>
+      <button class="filter-pill" data-status="overdue">Overdue</button>
+    </div>
+
+    <div class="table-wrap">
+      <table class="data-table" aria-label="Invoice list">
+        <thead>
+          <tr>
+            <th>Invoice #</th>
+            <th>Customer</th>
+            <th>Date</th>
+            <th>Due</th>
+            <th class="text-right">Total</th>
+            <th class="text-right">Balance</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="invoiceListTbody">
+          <tr><td colspan="7" class="text-center text-muted">Select Invoices from the menu to load.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+  <!-- /listScreen -->
+
+  <!-- ──────────────────────────────────────────────────────────
+       SCREEN 3: Customers
+  ─────────────────────────────────────────────────────────── -->
+  <section id="customersScreen" class="screen" aria-label="Customers">
+    <div class="flex justify-between items-center mb-3">
+      <h2>👤 Customers</h2>
+      <button class="btn btn-primary btn-sm" onclick="Customer.showAddCustomerModal()">
+        ➕ Add Customer
+      </button>
+    </div>
+
+    <div class="filter-bar">
+      <input
+        type="search"
+        id="customerSearchInput"
+        class="form-control"
+        placeholder="Search customers…"
+        aria-label="Search customers"
+      >
+    </div>
+
+    <div class="table-wrap">
+      <table class="data-table" aria-label="Customer list">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Phone</th>
+            <th>Email</th>
+            <th>Town</th>
+            <th>County</th>
+          </tr>
+        </thead>
+        <tbody id="customersTbody">
+          <tr><td colspan="5" class="text-center text-muted">Select Customers from the menu to load.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+  <!-- /customersScreen -->
+
+  <!-- ──────────────────────────────────────────────────────────
+       SCREEN 4: Products (admin only)
+  ─────────────────────────────────────────────────────────── -->
+  <section id="productsScreen" class="screen admin-only" aria-label="Products">
+    <div class="flex justify-between items-center mb-3">
+      <h2>📦 Products</h2>
+      <button class="btn btn-primary btn-sm" onclick="App.closeModal('addProductModal'); document.getElementById('addProductModal').classList.remove('hidden')">
+        ➕ Add Product
+      </button>
+    </div>
+
+    <div class="filter-bar">
+      <input
+        type="search"
+        id="productListSearch"
+        class="form-control"
+        placeholder="Search products…"
+        aria-label="Search products"
+        oninput="loadProductList(this.value)"
+      >
+    </div>
+
+    <div class="table-wrap">
+      <table class="data-table" aria-label="Product list">
+        <thead>
+          <tr>
+            <th>Code</th>
+            <th>Description</th>
+            <th class="text-right">Price (ex VAT)</th>
+            <th>VAT%</th>
+            <th>Unit</th>
+          </tr>
+        </thead>
+        <tbody id="productsTbody">
+          <tr><td colspan="5" class="text-center text-muted">Select Products from the menu to load.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+  <!-- /productsScreen -->
+
+  <!-- ──────────────────────────────────────────────────────────
+       SCREEN 5: Reports
+  ─────────────────────────────────────────────────────────── -->
+  <section id="reportsScreen" class="screen" aria-label="Reports">
+    <div class="flex justify-between items-center mb-3">
+      <h2>📊 Reports</h2>
+      <div class="flex gap-2 items-center flex-wrap">
+        <input type="date" id="reportDateFrom" class="form-control" style="width:auto" aria-label="Report from date">
+        <span>to</span>
+        <input type="date" id="reportDateTo" class="form-control" style="width:auto" aria-label="Report to date">
+        <button class="btn btn-primary btn-sm" onclick="App.showReports()">🔍 Run</button>
+      </div>
+    </div>
+
+    <!-- Stats cards -->
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-label">Total Invoiced</div>
+        <div class="stat-value" id="statTotalInvoiced">€0.00</div>
+      </div>
+      <div class="stat-card success">
+        <div class="stat-label">Total Paid</div>
+        <div class="stat-value" id="statTotalPaid">€0.00</div>
+      </div>
+      <div class="stat-card accent">
+        <div class="stat-label">Outstanding</div>
+        <div class="stat-value" id="statTotalOutstanding">€0.00</div>
+      </div>
+      <div class="stat-card danger">
+        <div class="stat-label">Overdue Count</div>
+        <div class="stat-value" id="statOverdueCount">0</div>
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table class="data-table" aria-label="Report invoice list">
+        <thead>
+          <tr>
+            <th>Invoice #</th>
+            <th>Customer</th>
+            <th>Date</th>
+            <th class="text-right">Total</th>
+            <th class="text-right">Balance</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="reportInvoicesTbody">
+          <tr><td colspan="6" class="text-center text-muted">Run a report to see results.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+  <!-- /reportsScreen -->
+
+  <!-- ──────────────────────────────────────────────────────────
+       SCREEN 6: Settings (admin only)
+  ─────────────────────────────────────────────────────────── -->
+  <section id="settingsScreen" class="screen admin-only" aria-label="Settings">
+    <div class="flex justify-between items-center mb-3">
+      <h2>⚙️ Settings</h2>
+      <button class="btn btn-primary btn-sm" onclick="App.saveSettings()">💾 Save All</button>
+    </div>
+
+    <!-- Shop Details -->
+    <div class="card settings-section">
+      <h3 class="mb-3">🏪 Shop Details</h3>
+      <div class="form-row col-2">
+        <div class="form-group">
+          <label class="form-label" for="setting_shop_name">Shop Name</label>
+          <input type="text" id="setting_shop_name" name="shop_name" class="form-control" aria-label="Shop name">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="setting_vat_number">VAT Number</label>
+          <input type="text" id="setting_vat_number" name="vat_number" class="form-control" aria-label="VAT number">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="setting_reg_number">Company Reg. No.</label>
+          <input type="text" id="setting_reg_number" name="reg_number" class="form-control" aria-label="Company registration number">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="setting_shop_phone">Phone</label>
+          <input type="tel" id="setting_shop_phone" name="shop_phone" class="form-control" aria-label="Shop phone">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="setting_shop_email">Email</label>
+          <input type="email" id="setting_shop_email" name="shop_email" class="form-control" aria-label="Shop email">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="setting_shop_address">Address</label>
+        <textarea id="setting_shop_address" name="shop_address" class="form-control" rows="3" aria-label="Shop address"></textarea>
+      </div>
+    </div>
+
+    <!-- SMTP Settings -->
+    <div class="card settings-section">
+      <h3 class="mb-3">✉️ Email (SMTP) Settings</h3>
+      <div class="form-row col-2">
+        <div class="form-group">
+          <label class="form-label" for="setting_smtp_host">SMTP Host</label>
+          <input type="text" id="setting_smtp_host" name="smtp_host" class="form-control" placeholder="mail.example.com" aria-label="SMTP host">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="setting_smtp_port">SMTP Port</label>
+          <input type="number" id="setting_smtp_port" name="smtp_port" class="form-control" placeholder="587" aria-label="SMTP port">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="setting_smtp_user">SMTP Username</label>
+          <input type="text" id="setting_smtp_user" name="smtp_user" class="form-control" autocomplete="username" aria-label="SMTP username">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="setting_smtp_password">SMTP Password</label>
+          <input type="password" id="setting_smtp_password" name="smtp_password" class="form-control"
+            placeholder="Leave blank to keep existing" autocomplete="current-password" aria-label="SMTP password">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="setting_smtp_from_name">From Name</label>
+          <input type="text" id="setting_smtp_from_name" name="smtp_from_name" class="form-control" aria-label="From name">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="setting_smtp_from_email">From Email</label>
+          <input type="email" id="setting_smtp_from_email" name="smtp_from_email" class="form-control" aria-label="From email">
+        </div>
+      </div>
+    </div>
+
+    <!-- Audit log & Backup -->
+    <div class="card settings-section">
+      <h3 class="mb-3">🔧 System</h3>
+      <div class="btn-row">
+        <button class="btn btn-light" onclick="App.showAuditLog()">📋 View Audit Log</button>
+        <button class="btn btn-light" onclick="triggerBackup()">💾 Download Backup</button>
+      </div>
+
+      <!-- Audit log table (inline) -->
+      <div class="table-wrap mt-3">
+        <table class="data-table audit-table" aria-label="Audit log">
+          <thead>
+            <tr>
+              <th>Timestamp</th>
+              <th>User</th>
+              <th>Action</th>
+              <th>Entity</th>
+              <th>ID</th>
+            </tr>
+          </thead>
+          <tbody id="auditTbody">
+            <tr><td colspan="5" class="text-center text-muted">Click "View Audit Log" to load.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+  <!-- /settingsScreen -->
+
+</main>
+<!-- /mainContent -->
+
+<!-- ═══════════════════════════════════════════════════════════
+     BOTTOM NAV (mobile)
+════════════════════════════════════════════════════════════ -->
+<nav id="bottomNav" role="navigation" aria-label="Bottom navigation">
+  <button class="nav-btn active" data-screen="invoiceScreen"
+    onclick="Invoice.newInvoice(); App.showScreen('invoiceScreen')" aria-label="New Invoice">
+    <span class="icon">➕</span>
+    <span>New</span>
+  </button>
+  <button class="nav-btn" data-screen="listScreen"
+    onclick="App.showScreen('listScreen')" aria-label="Invoices">
+    <span class="icon">📄</span>
+    <span>Invoices</span>
+  </button>
+  <button class="nav-btn" data-screen="customersScreen"
+    onclick="App.showScreen('customersScreen')" aria-label="Customers">
+    <span class="icon">👤</span>
+    <span>Customers</span>
+  </button>
+  <button class="nav-btn" data-screen="reportsScreen"
+    onclick="App.showScreen('reportsScreen')" aria-label="Reports">
+    <span class="icon">📊</span>
+    <span>Reports</span>
+  </button>
+  <button class="nav-btn admin-only" data-screen="settingsScreen"
+    onclick="App.showScreen('settingsScreen')" aria-label="Settings">
+    <span class="icon">⚙️</span>
+    <span>Settings</span>
+  </button>
+</nav>
+
+<!-- ═══════════════════════════════════════════════════════════
+     MODALS
+════════════════════════════════════════════════════════════ -->
+
+<!-- ── Login Modal ─────────────────────────────────────────── -->
+<div id="loginModal" role="dialog" aria-modal="true" aria-labelledby="loginModalTitle">
+  <div class="modal-backdrop" style="align-items:center">
+    <div class="modal-card" style="width:360px;border-radius:12px">
+      <div class="login-logo">
+        <span class="logo-icon">📋</span>
+        <h2 id="loginModalTitle">Easy Builders Merchant Pro</h2>
+        <p>Sign in to continue</p>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="loginUsername">Username</label>
+        <input
+          type="text"
+          id="loginUsername"
+          class="form-control"
+          autocomplete="username"
+          autofocus
+          placeholder="Enter your username"
+          aria-label="Username"
+          onkeydown="if(event.key==='Enter') document.getElementById('loginPassword').focus()"
+        >
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="loginPassword">Password</label>
+        <input
+          type="password"
+          id="loginPassword"
+          class="form-control"
+          autocomplete="current-password"
+          placeholder="Enter your password"
+          aria-label="Password"
+          onkeydown="if(event.key==='Enter') App.login()"
+        >
+      </div>
+      <div id="loginError" class="form-error mb-2" role="alert" aria-live="assertive"></div>
+      <button id="loginBtn" class="btn btn-primary w-full" onclick="App.login()" style="min-height:48px">
+        Sign In
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Add / Edit Customer Modal ──────────────────────────── -->
+<div id="addCustomerModal" class="hidden" role="dialog" aria-modal="true" aria-labelledby="addCustomerModalTitle">
+  <div class="modal-backdrop">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 id="addCustomerModalTitle">Add Customer</h3>
+        <button class="modal-close" onclick="Customer.hideAddCustomerModal()" aria-label="Close">×</button>
+      </div>
+      <form id="addCustomerForm" novalidate>
+        <div class="form-row col-2">
+          <div class="form-group" style="grid-column:1/-1">
+            <label class="form-label" for="cust_name">Full Name / Company *</label>
+            <input type="text" id="cust_name" name="customer_name" class="form-control" required aria-required="true" autofocus>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="cust_phone">Phone</label>
+            <input type="tel" id="cust_phone" name="phone" class="form-control" autocomplete="tel">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="cust_email">Email</label>
+            <input type="email" id="cust_email" name="email" class="form-control" autocomplete="email">
+          </div>
+          <div class="form-group" style="grid-column:1/-1">
+            <label class="form-label" for="cust_address1">Address Line 1</label>
+            <input type="text" id="cust_address1" name="address1" class="form-control" autocomplete="address-line1">
+          </div>
+          <div class="form-group" style="grid-column:1/-1">
+            <label class="form-label" for="cust_address2">Address Line 2 / Townland</label>
+            <input type="text" id="cust_address2" name="address2" class="form-control" autocomplete="address-line2">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="cust_town">Town / Village</label>
+            <input type="text" id="cust_town" name="town" class="form-control" autocomplete="address-level2">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="cust_county">County</label>
+            <input type="text" id="cust_county" name="county" class="form-control" placeholder="Donegal" autocomplete="address-level1">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="cust_eircode">Eircode</label>
+            <input type="text" id="cust_eircode" name="eircode" class="form-control" placeholder="F94 XXXX" maxlength="8" autocomplete="postal-code">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="cust_vat">VAT Number</label>
+            <input type="text" id="cust_vat" name="vat_number" class="form-control" placeholder="IE XXXXXXXX">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="cust_account">Account Number</label>
+            <input type="text" id="cust_account" name="account_number" class="form-control">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-light" onclick="Customer.hideAddCustomerModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Customer</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- ── Email Modal ─────────────────────────────────────────── -->
+<div id="emailModal" class="hidden" role="dialog" aria-modal="true" aria-labelledby="emailModalTitle">
+  <div class="modal-backdrop">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 id="emailModalTitle">✉️ Email Invoice</h3>
+        <button class="modal-close" onclick="App.closeModal('emailModal')" aria-label="Close">×</button>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="email_to">To</label>
+        <input type="email" id="email_to" name="email_to" class="form-control" aria-label="Email recipient">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="email_subject">Subject</label>
+        <input type="text" id="email_subject" name="email_subject" class="form-control" aria-label="Email subject">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="email_body">Message</label>
+        <textarea id="email_body" name="email_body" class="form-control" rows="6" aria-label="Email message"></textarea>
+      </div>
+      <p class="text-muted small mb-2">📎 The invoice PDF will be attached automatically.</p>
+      <div class="modal-footer">
+        <button class="btn btn-light" onclick="App.closeModal('emailModal')">Cancel</button>
+        <button id="btnSendEmail" class="btn btn-primary">📤 Send Email</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Payment Modal ───────────────────────────────────────── -->
+<div id="paymentModal" class="hidden" role="dialog" aria-modal="true" aria-labelledby="paymentModalTitle">
+  <div class="modal-backdrop">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 id="paymentModalTitle">💳 Record Payment</h3>
+        <button class="modal-close" onclick="App.closeModal('paymentModal')" aria-label="Close">×</button>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="payment_amount">Amount (€) *</label>
+        <input type="number" id="payment_amount" name="payment_amount" class="form-control"
+          min="0.01" step="0.01" required aria-required="true" aria-label="Payment amount">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Payment Method</label>
+        <div class="method-pills" role="radiogroup" aria-label="Payment method">
+          <div class="method-pill">
+            <input type="radio" id="method_cash" name="payment_method" value="cash" checked>
+            <label for="method_cash">💵 Cash</label>
+          </div>
+          <div class="method-pill">
+            <input type="radio" id="method_card" name="payment_method" value="card">
+            <label for="method_card">💳 Card</label>
+          </div>
+          <div class="method-pill">
+            <input type="radio" id="method_cheque" name="payment_method" value="cheque">
+            <label for="method_cheque">📝 Cheque</label>
+          </div>
+          <div class="method-pill">
+            <input type="radio" id="method_bank" name="payment_method" value="bank_transfer">
+            <label for="method_bank">🏦 Bank Transfer</label>
+          </div>
+          <div class="method-pill">
+            <input type="radio" id="method_other" name="payment_method" value="other">
+            <label for="method_other">Other</label>
+          </div>
+        </div>
+      </div>
+      <div class="form-row col-2">
+        <div class="form-group">
+          <label class="form-label" for="payment_date">Payment Date</label>
+          <input type="date" id="payment_date" name="payment_date" class="form-control" aria-label="Payment date">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="payment_reference">Reference / Receipt No.</label>
+          <input type="text" id="payment_reference" name="payment_reference" class="form-control" aria-label="Payment reference">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-light" onclick="App.closeModal('paymentModal')">Cancel</button>
+        <button id="btnSavePayment" class="btn btn-success">✅ Save Payment</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Add Product Modal ───────────────────────────────────── -->
+<div id="addProductModal" class="hidden admin-only" role="dialog" aria-modal="true" aria-labelledby="addProductModalTitle">
+  <div class="modal-backdrop">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 id="addProductModalTitle">📦 Add Product</h3>
+        <button class="modal-close" onclick="App.closeModal('addProductModal')" aria-label="Close">×</button>
+      </div>
+      <form id="addProductForm" novalidate onsubmit="saveProduct(event)">
+        <div class="form-row col-2">
+          <div class="form-group">
+            <label class="form-label" for="prod_code">Product Code *</label>
+            <input type="text" id="prod_code" name="code" class="form-control" required aria-required="true" autofocus>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="prod_unit">Unit</label>
+            <input type="text" id="prod_unit" name="unit" class="form-control" placeholder="Each, m², m, kg…">
+          </div>
+          <div class="form-group" style="grid-column:1/-1">
+            <label class="form-label" for="prod_description">Description *</label>
+            <input type="text" id="prod_description" name="description" class="form-control" required aria-required="true">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="prod_price">Price (ex VAT €) *</label>
+            <input type="number" id="prod_price" name="price" class="form-control"
+              min="0" step="0.0001" required aria-required="true" aria-label="Product price">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="prod_vat">VAT Rate %</label>
+            <select id="prod_vat" name="vat_rate" class="form-control" aria-label="VAT rate">
+              <option value="0">0% (Exempt)</option>
+              <option value="9">9%</option>
+              <option value="13.5" selected>13.5%</option>
+              <option value="23">23%</option>
+            </select>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-light" onclick="App.closeModal('addProductModal')">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Product</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     SCRIPTS
+════════════════════════════════════════════════════════════ -->
+<script src="/ebmpro/js/db.js"></script>
+<script src="/ebmpro/js/sync.js"></script>
+<script src="/ebmpro/js/auth.js"></script>
+<script src="/ebmpro/js/customer.js"></script>
+<script src="/ebmpro/js/product.js"></script>
+<script src="/ebmpro/js/invoice.js"></script>
+<script src="/ebmpro/js/pdf.js"></script>
+<script src="/ebmpro/js/app.js"></script>
+
+<script>
+/* ── Service Worker Registration ──────────────────────────── */
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/ebmpro/sw.js', { scope: '/ebmpro/' })
+      .then(reg => console.info('[SW] Registered, scope:', reg.scope))
+      .catch(err => console.warn('[SW] Registration failed:', err));
+  });
+}
+
+/* ── Payment modal: default date to today ─────────────────── */
+document.addEventListener('DOMContentLoaded', () => {
+  const pd = document.getElementById('payment_date');
+  if (pd) pd.value = new Date().toISOString().slice(0, 10);
+});
+
+/* ── Product list loader (products screen) ────────────────── */
+async function loadProductList(query = '') {
+  const tbody = document.getElementById('productsTbody');
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="5" class="text-center"><span class="spinner"></span> Loading…</td></tr>';
+  try {
+    const url  = query
+      ? `/ebmpro_api/products.php?q=${encodeURIComponent(query)}`
+      : '/ebmpro_api/products.php';
+    const resp = await fetch(url, { headers: Auth.getAuthHeaders() });
+    const data = await resp.json();
+    const list = Array.isArray(data) ? data : (data.products || []);
+    if (!list.length) {
+      tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No products found.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = list.map(p => `
+      <tr>
+        <td><strong>${escH(p.code || '')}</strong></td>
+        <td>${escH(p.description || '')}</td>
+        <td class="text-right">€${parseFloat(p.price || 0).toFixed(2)}</td>
+        <td>${escH(String(p.vat_rate || 0))}%</td>
+        <td>${escH(p.unit || '')}</td>
+      </tr>
+    `).join('');
+  } catch {
+    tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Failed to load products.</td></tr>';
+  }
+}
+
+/* ── Save product (addProductModal submit) ────────────────── */
+async function saveProduct(e) {
+  e.preventDefault();
+  const form = document.getElementById('addProductForm');
+  const data = Object.fromEntries(new FormData(form).entries());
+  try {
+    const result = await Sync.syncData('/ebmpro_api/products.php', data, 'POST');
+    if (result) {
+      Product.clearCache();
+      App.closeModal('addProductModal');
+      App.showToast('Product saved.', 'success');
+      loadProductList();
+    }
+  } catch (err) {
+    App.showToast(err.message || 'Failed to save product.', 'danger');
+  }
+}
+
+/* ── Trigger backup download ──────────────────────────────── */
+async function triggerBackup() {
+  try {
+    const resp = await fetch('/ebmpro_api/backup.php', { headers: Auth.getAuthHeaders() });
+    if (!resp.ok) throw new Error('Backup failed');
+    const blob = await resp.blob();
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = `ebmpro-backup-${new Date().toISOString().slice(0,10)}.zip`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    App.showToast(err.message || 'Backup failed.', 'danger');
+  }
+}
+
+/* ── Escape HTML helper (global, for inline onXXX handlers) ── */
+function escH(str) {
+  return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>
+
 </body>
 </html>
