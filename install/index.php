@@ -840,7 +840,7 @@ elseif ($step === 4):
   <div class="form-cols">
     <div class="form-row">
       <label>SMTP Host</label>
-      <input type="text" name="smtp_host" value="<?= val('smtp_host', 'smtp.example.com') ?>" placeholder="smtp.gmail.com">
+      <input type="text" name="smtp_host" value="<?= val('smtp_host', 'mail.shanemcgee.biz') ?>" placeholder="mail.shanemcgee.biz">
     </div>
     <div class="form-row">
       <label>SMTP Port</label>
