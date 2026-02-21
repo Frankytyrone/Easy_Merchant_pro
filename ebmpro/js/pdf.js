@@ -26,259 +26,342 @@ const PDF = (() => {
     throw new Error('jsPDF not loaded');
   }
 
+  /* ── Draw text-based logo box (top-left) ──────────────────── */
+  function drawLogoBox(doc, x, y, w, h) {
+    // Outer border with rounded corners
+    doc.setDrawColor(0, 0, 0);
+    doc.setLineWidth(0.5);
+    doc.roundedRect(x, y, w, h, 2, 2, 'S');
+
+    // Line 1: "SHANE MC GEE" — bold, large, spaced
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(18);
+    doc.setTextColor(0, 0, 0);
+    doc.text('SHANE MC GEE', x + w / 2, y + 9, { align: 'center', charSpace: 1.5 });
+
+    // Thin divider under line 1
+    doc.setLineWidth(0.3);
+    doc.line(x + 4, y + 11, x + w - 4, y + 11);
+
+    // Line 2: "Solid Fuel" — medium bold
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(13);
+    doc.text('Solid Fuel', x + w / 2, y + 17, { align: 'center' });
+
+    // Line 3: "Paint · Hardware · Animal Feed" — small normal
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.text('Paint \u00B7 Hardware \u00B7 Animal Feed', x + w / 2, y + 23, { align: 'center' });
+  }
+
   /* ── generateInvoicePDF ───────────────────────────────────── */
   function generateInvoicePDF(invoice, settings = {}) {
     const jsPDF = getJsPDF();
     const doc   = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
 
     const shopName    = settings.shop_name    || 'Easy Builders Merchant';
-    const shopAddr    = settings.shop_address || 'Falcarragh, Co. Donegal';
-    const shopPhone   = settings.shop_phone   || '';
+    const shopAddr1   = settings.shop_address || 'Falcarragh';
+    const shopAddr2   = settings.shop_address2 || '';
+    const shopTown    = settings.shop_town    || 'Co. Donegal';
     const shopEmail   = settings.shop_email   || '';
-    const vatNo       = settings.vat_number   || '';
-    const regNo       = settings.reg_number   || '';
-    const logoText    = shopName; // Text fallback (no raster logo needed)
 
-    const isQuote     = invoice.invoice_type === 'quote';
-    const docLabel    = isQuote ? 'QUOTE' : 'INVOICE';
-    const docNumber   = invoice.invoice_number || '—';
+    const pageW   = doc.internal.pageSize.getWidth();
+    const marginL = 15;
+    const marginR = 15;
 
-    const pageW = doc.internal.pageSize.getWidth();
-    const marginL = 15, marginR = 15;
-    const colMid  = pageW / 2;
+    /* ── 1. Logo box (top-left) ──────────────────────────────── */
+    drawLogoBox(doc, marginL, 10, 85, 24);
 
-    /* ── Header bar ─────────────────────────────────────────── */
-    doc.setFillColor(26, 58, 92);       // --primary
-    doc.rect(0, 0, pageW, 28, 'F');
-
-    // Shop name
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(16);
+    /* ── 2. Shop address (top-right, right-aligned, bold) ─────── */
     doc.setFont('helvetica', 'bold');
-    doc.text(logoText, marginL, 12);
-
-    // Sub-line: address | phone
-    doc.setFontSize(8);
-    doc.setFont('helvetica', 'normal');
-    const addrLine = [shopAddr, shopPhone, shopEmail].filter(Boolean).join('  |  ');
-    doc.text(addrLine, marginL, 19);
-    if (vatNo) doc.text(`VAT No: ${vatNo}`, marginL, 24);
-
-    // Document type (right)
-    doc.setFontSize(20);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(232, 134, 26);   // --accent
-    doc.text(docLabel, pageW - marginR, 16, { align: 'right' });
-
-    /* ── Invoice meta (right column) ───────────────────────── */
-    let y = 34;
-    doc.setTextColor(40, 40, 40);
     doc.setFontSize(9);
-    doc.setFont('helvetica', 'normal');
-
-    const metaRows = [
-      [`${docLabel} No:`, docNumber],
-      ['Date:',           fmtDate(invoice.invoice_date)],
-      ...(isQuote ? [] : [['Due Date:', fmtDate(invoice.due_date)]]),
-      ['Store:',          invoice.store_code || ''],
-      ['Status:',         (invoice.status || 'draft').toUpperCase()]
-    ];
-
-    metaRows.forEach(([label, val]) => {
-      doc.setFont('helvetica', 'bold');
-      doc.text(label, pageW - marginR - 40, y, { align: 'left' });
-      doc.setFont('helvetica', 'normal');
-      doc.text(String(val), pageW - marginR, y, { align: 'right' });
-      y += 6;
+    doc.setTextColor(0, 0, 0);
+    const addrLines = [shopName, shopAddr1];
+    if (shopAddr2) addrLines.push(shopAddr2);
+    addrLines.push(shopTown);
+    let addrY = 14;
+    addrLines.forEach(line => {
+      doc.text(line, pageW - marginR, addrY, { align: 'right' });
+      addrY += 5;
     });
 
-    /* ── INVOICE TO / DELIVERY TO ───────────────────────────── */
-    y = 34;
+    /* ── 3. "Page 1 of 1" (small, right-aligned) ─────────────── */
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7);
+    doc.text('Page 1 of 1', pageW - marginR, 38, { align: 'right' });
+
+    /* ── 4. Three-column bordered grid box ───────────────────── */
+    const gridX  = marginL;
+    const gridY  = 42;
+    const gridW  = pageW - marginL - marginR;
+    const gridH  = 45;
+    const col1W  = gridW * 0.36;
+    const col2W  = gridW * 0.36;
+    // col3W is the remainder
+
+    doc.setDrawColor(0, 0, 0);
+    doc.setLineWidth(0.3);
+    // Outer border
+    doc.rect(gridX, gridY, gridW, gridH, 'S');
+    // Vertical dividers
+    doc.line(gridX + col1W,         gridY, gridX + col1W,         gridY + gridH);
+    doc.line(gridX + col1W + col2W, gridY, gridX + col1W + col2W, gridY + gridH);
+    // Header row bottom border (at y+7)
+    doc.line(gridX, gridY + 7, gridX + gridW, gridY + 7);
+
+    // Column header labels
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(8);
-    doc.setTextColor(100, 100, 100);
-    doc.text('INVOICE TO:', marginL, y);
-    y += 5;
+    doc.setTextColor(0, 0, 0);
+    doc.text('Invoice address', gridX + 2,                   gridY + 5);
+    doc.text('Delivery address', gridX + col1W + 2,          gridY + 5);
+    doc.text('Invoice details',  gridX + col1W + col2W + 2,  gridY + 5);
 
-    doc.setTextColor(40, 40, 40);
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'bold');
-    doc.text(invoice.customer_name || '—', marginL, y);
-    y += 5;
-
-    doc.setFontSize(9);
-    doc.setFont('helvetica', 'normal');
+    // Column 1: Invoice address
+    const custName = invoice.customer_name || '';
     const custAddr = [
-      invoice.customer_address1  || invoice.address_1,
-      invoice.customer_address2  || invoice.address_2,
-      invoice.customer_town      || invoice.inv_town,
-      invoice.customer_county    || invoice.inv_region,
-      invoice.customer_eircode   || invoice.inv_postcode
+      invoice.customer_address1 || invoice.address_1,
+      invoice.customer_address2 || invoice.address_2,
+      invoice.customer_town     || invoice.inv_town,
+      invoice.customer_county   || invoice.inv_region,
+      invoice.customer_eircode  || invoice.inv_postcode
     ].filter(Boolean);
-    custAddr.forEach(line => { doc.text(line, marginL, y); y += 5; });
-    const custPhone = invoice.customer_phone || invoice.inv_telephone;
-    const custEmail = invoice.customer_email || invoice.email_address;
-    if (custPhone) { doc.text(custPhone, marginL, y); y += 5; }
-    if (custEmail) { doc.text(custEmail, marginL, y); y += 5; }
 
-    // Delivery address (right side, same top)
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    let cy = gridY + 12;
+    doc.setFont('helvetica', 'bold');
+    doc.text(custName, gridX + 2, cy);
+    cy += 5;
+    doc.setFont('helvetica', 'normal');
+    custAddr.forEach(line => {
+      doc.text(line, gridX + 2, cy);
+      cy += 5;
+    });
+
+    // Column 2: Delivery address
     const da = invoice.delivery_address || {};
     const daLines = [da.address1, da.address2, da.town, da.county, da.eircode].filter(Boolean);
-    if (daLines.length) {
-      let dy = 39;
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(8);
-      doc.setTextColor(100, 100, 100);
-      doc.text('DELIVERY TO:', colMid + 5, dy);
-      dy += 5;
-      doc.setFontSize(9);
-      doc.setFont('helvetica', 'normal');
-      doc.setTextColor(40, 40, 40);
-      daLines.forEach(line => { doc.text(line, colMid + 5, dy); dy += 5; });
-    }
+    let dy2 = gridY + 12;
+    daLines.forEach(line => {
+      doc.text(line, gridX + col1W + 2, dy2);
+      dy2 += 5;
+    });
 
-    /* ── Divider line ───────────────────────────────────────── */
-    const tableTop = Math.max(y, 75) + 4;
-    doc.setDrawColor(200, 200, 200);
-    doc.line(marginL, tableTop - 2, pageW - marginR, tableTop - 2);
+    // Column 3: Invoice details
+    const col3X   = gridX + col1W + col2W + 2;
+    const invoiceNumber = invoice.invoice_number || '—';
+    const invoiceDate   = fmtDate(invoice.invoice_date);
+    const dueDate       = fmtDate(invoice.due_date);
+    const accountNo     = invoice.account_no || 'none';
 
-    /* ── Items table ────────────────────────────────────────── */
-    const tableColumns = [
-      { header: 'Code',      dataKey: 'code'      },
-      { header: 'Description', dataKey: 'description' },
-      { header: 'Qty',       dataKey: 'qty'       },
-      { header: 'Unit Price',dataKey: 'unit_price' },
-      { header: 'Disc%',     dataKey: 'disc'      },
-      { header: 'VAT%',      dataKey: 'vat_rate'  },
-      { header: 'Net',       dataKey: 'line_net'  },
-      { header: 'VAT',       dataKey: 'line_vat'  },
-      { header: 'Total',     dataKey: 'line_total' }
-    ];
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    let iy = gridY + 12;
+    const detailRightX = gridX + gridW - 2;
 
-    const tableRows = (invoice.items || []).map(item => ({
-      code:        item.code        || '',
-      description: item.description || '',
-      qty:         item.qty         || 0,
-      unit_price:  fmtCur(item.unit_price),
-      disc:        item.discount_pct > 0 ? `${item.discount_pct}%` : '',
-      vat_rate:    `${item.vat_rate || 0}%`,
-      line_net:    fmtCur(item.line_net),
-      line_vat:    fmtCur(item.line_vat),
-      line_total:  fmtCur(item.line_total)
-    }));
+    // Number:
+    doc.text('Number:', col3X, iy);
+    doc.text(invoiceNumber, detailRightX, iy, { align: 'right' });
+    iy += 5;
+    // Date:
+    doc.text('Date:', col3X, iy);
+    doc.text(invoiceDate, detailRightX, iy, { align: 'right' });
+    iy += 5;
+    // Due: (bold value)
+    doc.text('Due:', col3X, iy);
+    doc.setFont('helvetica', 'bold');
+    doc.text(dueDate, detailRightX, iy, { align: 'right' });
+    doc.setFont('helvetica', 'normal');
+    iy += 5;
+    // Account No:
+    doc.text('Account No:', col3X, iy);
+    doc.text(accountNo, detailRightX, iy, { align: 'right' });
+
+    /* ── 5. "Invoice Details" label row ──────────────────────── */
+    const labelRowY = gridY + gridH + 3;
+    doc.setFillColor(220, 220, 220);
+    doc.rect(gridX, labelRowY, gridW, 7, 'F');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.setTextColor(0, 0, 0);
+    doc.text('Invoice Details', gridX + 2, labelRowY + 5);
+
+    /* ── 6. Line items table ──────────────────────────────────── */
+    const tableTop = labelRowY + 7;
+
+    const tableRows = (invoice.items || []).map(item => {
+      const qty     = parseFloat(item.qty)          || 0;
+      const price   = parseFloat(item.unit_price)   || 0;
+      const discPct = parseFloat(item.discount_pct) || 0;
+      const vatRate = parseFloat(item.vat_rate)      || 0;
+      const lineNet = parseFloat(item.line_net != null ? item.line_net : (qty * price * (1 - discPct / 100)));
+      const lineVat = parseFloat(item.line_vat != null ? item.line_vat : (lineNet * vatRate / 100));
+      return {
+        code:        item.code        || '',
+        description: item.description || '',
+        tx:          vatRate > 0 ? '\u2713' : '',
+        vat_rate:    vatRate > 0 ? `${vatRate}%` : '0%',
+        qty:         qty,
+        price:       fmtCur(price),
+        discount:    discPct > 0 ? `${discPct}%` : '',
+        amount:      fmtCur(lineNet),
+        vat:         fmtCur(lineVat)
+      };
+    });
 
     doc.autoTable({
       startY:  tableTop,
-      columns: tableColumns,
-      body:    tableRows,
-      theme:   'striped',
+      columns: [
+        { header: 'Code',        dataKey: 'code'        },
+        { header: 'Description', dataKey: 'description' },
+        { header: 'Tx',          dataKey: 'tx'          },
+        { header: 'VAT%',        dataKey: 'vat_rate'    },
+        { header: 'Qty',         dataKey: 'qty'         },
+        { header: 'Price',       dataKey: 'price'       },
+        { header: 'Discount',    dataKey: 'discount'    },
+        { header: 'Amount',      dataKey: 'amount'      },
+        { header: 'VAT',         dataKey: 'vat'         }
+      ],
+      body: tableRows,
+      theme: 'striped',
       headStyles: {
-        fillColor:  [26, 58, 92],
-        textColor:  255,
-        fontStyle:  'bold',
-        fontSize:   8
+        fillColor: [26, 58, 92],
+        textColor: 255,
+        fontStyle: 'bold',
+        fontSize:  8
       },
-      bodyStyles:      { fontSize: 8 },
+      bodyStyles:         { fontSize: 8 },
       alternateRowStyles: { fillColor: [245, 248, 252] },
       columnStyles: {
-        qty:        { halign: 'right', cellWidth: 12 },
-        unit_price: { halign: 'right', cellWidth: 22 },
-        disc:       { halign: 'right', cellWidth: 12 },
-        vat_rate:   { halign: 'right', cellWidth: 12 },
-        line_net:   { halign: 'right', cellWidth: 22 },
-        line_vat:   { halign: 'right', cellWidth: 18 },
-        line_total: { halign: 'right', cellWidth: 24, fontStyle: 'bold' }
+        code:        { cellWidth: 18 },
+        description: { cellWidth: 'auto' },
+        tx:          { halign: 'center', cellWidth: 8 },
+        vat_rate:    { halign: 'right',  cellWidth: 12 },
+        qty:         { halign: 'right',  cellWidth: 10 },
+        price:       { halign: 'right',  cellWidth: 20 },
+        discount:    { halign: 'right',  cellWidth: 16 },
+        amount:      { halign: 'right',  cellWidth: 22 },
+        vat:         { halign: 'right',  cellWidth: 18 }
       },
       margin: { left: marginL, right: marginR }
     });
 
-    /* ── Totals block ───────────────────────────────────────── */
-    let ty = doc.lastAutoTable.finalY + 6;
-    const totW  = 80;
-    const totX  = pageW - marginR - totW;
+    /* ── 7. Totals row table ──────────────────────────────────── */
+    const subtotal  = parseFloat(invoice.subtotal)     || 0;
+    const discTotal = parseFloat(invoice.discount_total) || 0;
+    const delivery  = 0;
+    const vatTotal  = parseFloat(invoice.vat_total)    || 0;
+    const total     = parseFloat(invoice.total)        || 0;
+    const paid      = parseFloat(invoice.amount_paid)  || 0;
+    const balance   = parseFloat(invoice.balance)      || (total - paid);
 
-    function totRow(label, value, bold = false, color = null) {
-      if (color) doc.setTextColor(...color);
-      else doc.setTextColor(40, 40, 40);
-      doc.setFont('helvetica', bold ? 'bold' : 'normal');
-      doc.setFontSize(9);
-      doc.text(label, totX + 2, ty);
-      doc.text(value, pageW - marginR, ty, { align: 'right' });
-      ty += 6;
+    doc.autoTable({
+      startY: doc.lastAutoTable.finalY,
+      head:   [],
+      body: [[
+        fmtCur(subtotal),
+        discTotal > 0 ? fmtCur(discTotal) : '—',
+        fmtCur(delivery),
+        fmtCur(vatTotal),
+        fmtCur(total),
+        paid > 0 ? fmtCur(paid) : '—',
+        fmtCur(balance)
+      ]],
+      columns: [
+        { header: 'Sub-total', dataKey: 0 },
+        { header: 'Discount',  dataKey: 1 },
+        { header: 'Delivery',  dataKey: 2 },
+        { header: 'VAT',       dataKey: 3 },
+        { header: 'Total',     dataKey: 4 },
+        { header: 'Paid',      dataKey: 5 },
+        { header: 'BALANCE',   dataKey: 6 }
+      ],
+      theme: 'plain',
+      styles: { fontSize: 8, halign: 'right', lineWidth: 0.2, lineColor: [0, 0, 0] },
+      columnStyles: {
+        6: { fontStyle: 'bold' }
+      },
+      margin: { left: marginL, right: marginR }
+    });
+
+    /* ── 8. Footer text ───────────────────────────────────────── */
+    let footY = doc.lastAutoTable.finalY + 8;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(40, 40, 40);
+    doc.text(shopName, marginL, footY);
+    if (shopEmail) {
+      footY += 5;
+      doc.text(`email: ${shopEmail}`, marginL, footY);
     }
 
-    // Thin separator
-    doc.setDrawColor(200, 200, 200);
-    doc.line(totX, ty - 2, pageW - marginR, ty - 2);
+    /* ── 9. Reply slip (if balance > 0) ──────────────────────── */
+    if (balance > 0) {
+      const pageH  = doc.internal.pageSize.getHeight();
+      const slipY  = pageH - 52;
 
-    totRow('Subtotal (ex VAT)', fmtCur(invoice.subtotal));
-
-    // VAT breakdown
-    const breakdown = invoice.vat_breakdown || {};
-    Object.entries(breakdown)
-      .sort(([a], [b]) => parseFloat(a) - parseFloat(b))
-      .forEach(([rate, amt]) => totRow(`VAT @ ${rate}%`, fmtCur(amt)));
-
-    // Bold separator before total
-    doc.setDrawColor(26, 58, 92);
-    doc.setLineWidth(0.5);
-    doc.line(totX, ty - 1, pageW - marginR, ty - 1);
-    doc.setLineWidth(0.2);
-
-    totRow('TOTAL', fmtCur(invoice.total), true);
-
-    if (invoice.amount_paid > 0) {
-      totRow('Paid', `−${fmtCur(invoice.amount_paid)}`, false, [39, 174, 96]);
-      doc.setDrawColor(200, 200, 200);
-      doc.line(totX, ty - 1, pageW - marginR, ty - 1);
-      totRow('Balance Due', fmtCur(invoice.balance), true, [231, 76, 60]);
-    }
-
-    /* ── Notes ──────────────────────────────────────────────── */
-    if (invoice.notes) {
-      ty += 4;
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(8);
-      doc.setTextColor(100, 100, 100);
-      doc.text('Notes:', marginL, ty); ty += 5;
-      doc.setFont('helvetica', 'normal');
-      doc.setTextColor(60, 60, 60);
-      const lines = doc.splitTextToSize(invoice.notes, colMid - marginL);
-      doc.text(lines, marginL, ty);
-      ty += lines.length * 5 + 4;
-    }
-
-    /* ── Reply slip (if balance > 0) ────────────────────────── */
-    if (invoice.balance > 0) {
-      const slipY = doc.internal.pageSize.getHeight() - 40;
-      doc.setDrawColor(150, 150, 150);
-      doc.setLineDashPattern([2, 2], 0);
+      // Full-width solid separator
+      doc.setDrawColor(0, 0, 0);
+      doc.setLineWidth(0.4);
       doc.line(marginL, slipY, pageW - marginR, slipY);
-      doc.setLineDashPattern([], 0);
 
+      // Left side: customer name + address
+      let slipLY = slipY + 7;
       doc.setFont('helvetica', 'bold');
-      doc.setFontSize(8);
-      doc.setTextColor(100, 100, 100);
-      doc.text('PAYMENT SLIP — Please return with payment', marginL, slipY + 5);
-
-      doc.setFont('helvetica', 'normal');
       doc.setFontSize(9);
-      doc.setTextColor(40, 40, 40);
-      doc.text(`${docLabel} No: ${docNumber}`, marginL, slipY + 12);
-      doc.text(`Customer: ${invoice.customer_name || ''}`, marginL, slipY + 18);
-      doc.text(`Amount Due: ${fmtCur(invoice.balance)}`, marginL, slipY + 24);
-      doc.text(`Due Date: ${fmtDate(invoice.due_date)}`, marginL, slipY + 30);
-    }
+      doc.setTextColor(0, 0, 0);
+      doc.text(custName, marginL, slipLY);
+      slipLY += 5;
+      doc.setFont('helvetica', 'normal');
+      custAddr.forEach(line => {
+        doc.text(line, marginL, slipLY);
+        slipLY += 5;
+      });
 
-    /* ── Footer ─────────────────────────────────────────────── */
-    const pageH   = doc.internal.pageSize.getHeight();
-    doc.setFont('helvetica', 'italic');
-    doc.setFontSize(7.5);
-    doc.setTextColor(150, 150, 150);
-    const footerParts = ['E&OE', 'Registered in Ireland'];
-    if (vatNo) footerParts.push(`VAT No: ${vatNo}`);
-    if (regNo) footerParts.push(`Reg No: ${regNo}`);
-    doc.text(footerParts.join('  ·  '), pageW / 2, pageH - 8, { align: 'center' });
+      // Right side: bordered two-column box
+      const boxX  = pageW - marginR - 75;
+      const boxY  = slipY + 5;
+      const boxW  = 75;
+      const rowH  = 7;
+      const rows  = [
+        ['Number',  invoiceNumber,   true  ],
+        ['Date',    invoiceDate,     false ],
+        ['Due',     dueDate,         false ],
+        ['Balance', fmtCur(balance), true ]
+      ];
+      const boxH  = rows.length * rowH;
+      const labelColW = 28;
+
+      doc.setDrawColor(0, 0, 0);
+      doc.setLineWidth(0.3);
+      doc.rect(boxX, boxY, boxW, boxH, 'S');
+      // Vertical divider
+      doc.line(boxX + labelColW, boxY, boxX + labelColW, boxY + boxH);
+
+      rows.forEach(([ label, val, bold ], i) => {
+        const ry = boxY + i * rowH;
+        // Row bottom border (except last)
+        if (i < rows.length - 1) {
+          doc.line(boxX, ry + rowH, boxX + boxW, ry + rowH);
+        }
+        doc.setFont('helvetica', bold ? 'bold' : 'normal');
+        doc.setFontSize(8);
+        doc.text(label, boxX + 2, ry + 5);
+        doc.setFont('helvetica', bold ? 'bold' : 'normal');
+        doc.text(val, boxX + boxW - 2, ry + 5, { align: 'right' });
+      });
+
+      // Centred note below box
+      doc.setFont('helvetica', 'italic');
+      doc.setFontSize(8);
+      doc.text(
+        'Please return this reply slip with your payment - Thank You.',
+        pageW / 2,
+        boxY + boxH + 6,
+        { align: 'center' }
+      );
+    }
 
     return doc;
   }
