@@ -6,7 +6,7 @@
 - 20 minutes
 
 ## Step 1: Upload Files
-1. Log into cPanel at https://yourhostname/cpanel
+1. Log into cPanel at https://shanemcgee.biz/cpanel
 2. Click **File Manager**
 3. Navigate to **public_html**
 4. Click **Upload** (top toolbar)

@@ -23,13 +23,13 @@ try {
     $where  = ['1=1'];
     $params = [];
 
-    if (!empty($_GET['entity_type'])) {
-        $where[]  = 'entity_type = ?';
-        $params[] = $_GET['entity_type'];
+    if (!empty($_GET['table_name']) || !empty($_GET['entity_type'])) {
+        $where[]  = 'table_name = ?';
+        $params[] = $_GET['table_name'] ?? $_GET['entity_type'];
     }
-    if (!empty($_GET['entity_id'])) {
-        $where[]  = 'entity_id = ?';
-        $params[] = (int)$_GET['entity_id'];
+    if (!empty($_GET['record_id']) || !empty($_GET['entity_id'])) {
+        $where[]  = 'record_id = ?';
+        $params[] = (int)($_GET['record_id'] ?? $_GET['entity_id']);
     }
     if (!empty($_GET['user_id'])) {
         $where[]  = 'user_id = ?';

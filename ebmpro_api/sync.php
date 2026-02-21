@@ -36,7 +36,7 @@ function applySyncAction(PDO $pdo, array $auth, array $item): array
 }
 
 // ── Sync: create invoice ──────────────────────────────────────────────────────
-// invoice_sequences: store_code PK, last_invoice_number, last_quote_number
+// invoice_sequences: store_code PK, next_invoice_num, next_quote_num
 function syncCreateInvoice(PDO $pdo, array $auth, array $b): array
 {
     if (empty($b['store_id']) || empty($b['customer_id']) || empty($b['invoice_date'])
@@ -54,7 +54,8 @@ function syncCreateInvoice(PDO $pdo, array $auth, array $b): array
     $storeRow  = $sStmt->fetch();
     $storeCode = $storeRow ? $storeRow['code'] : 'store';
 
-    $seqCol = ($type === 'quote') ? 'last_quote_number' : 'last_invoice_number';
+    $seqCol    = ($type === 'quote') ? 'next_quote_num' : 'next_invoice_num';
+    $prefixCol = ($type === 'quote') ? 'quote_prefix'   : 'invoice_prefix';
 
     $pdo->beginTransaction();
     try {
@@ -66,68 +67,65 @@ function syncCreateInvoice(PDO $pdo, array $auth, array $b): array
 
         if (!$seq) {
             $pdo->prepare(
-                'INSERT INTO invoice_sequences (store_code, last_invoice_number, last_quote_number)
-                 VALUES (?, 1000, 1000)'
+                'INSERT INTO invoice_sequences (store_code, next_invoice_num, next_quote_num)
+                 VALUES (?,1001,1001)'
             )->execute([$storeCode]);
-            $last = 1000;
+            $current = 1001;
         } else {
-            $last = (int)$seq[$seqCol];
+            $current = (int)$seq[$seqCol];
         }
-        $next = $last + 1;
+        // Increment the stored next number
         $pdo->prepare("UPDATE invoice_sequences SET {$seqCol} = ? WHERE store_code = ?")
-            ->execute([$next, $storeCode]);
+            ->execute([$current + 1, $storeCode]);
 
-        // Fetch prefix from settings
-        $prefix    = strtoupper(substr($storeCode, 0, 3));
-        $prefixCol = 'invoice_prefix_' . $storeCode;
-        try {
-            $pr = $pdo->query("SELECT {$prefixCol} FROM settings LIMIT 1")->fetch();
-            if ($pr && !empty($pr[$prefixCol])) {
-                $prefix = $pr[$prefixCol];
-            }
-        } catch (PDOException $e) { /* ignore */ }
+        // Fetch prefix from stores table
+        $storeRow2 = $pdo->prepare('SELECT ' . $prefixCol . ' FROM stores WHERE code = ? LIMIT 1');
+        $storeRow2->execute([$storeCode]);
+        $pr        = $storeRow2->fetch();
+        $prefix    = $pr ? ($pr[$prefixCol] ?? strtoupper(substr($storeCode, 0, 3))) : strtoupper(substr($storeCode, 0, 3));
 
-        $invNumber = $prefix . '-' . str_pad($next, 4, '0', STR_PAD_LEFT);
+        $invNumber = $prefix . '-' . str_pad($current, 4, '0', STR_PAD_LEFT);
 
         $pdo->prepare(
             'INSERT INTO invoices
-             (invoice_number, store_id, invoice_type, status, customer_id,
-              invoice_date, due_date, notes, created_by, created_store_context,
+             (invoice_number, store_code, invoice_type, status, customer_id,
+              invoice_date, due_date, notes, created_by,
               created_at, updated_at)
-             VALUES (?,?,?,?,?,?,?,?,?,?,NOW(),NOW())'
+             VALUES (?,?,?,?,?,?,?,?,?,NOW(),NOW())'
         )->execute([
-            $invNumber, $storeId, $type, 'draft', (int)$b['customer_id'],
+            $invNumber, $storeCode, $type, 'draft', (int)$b['customer_id'],
             $b['invoice_date'], $b['due_date'] ?? null,
-            $b['notes'] ?? null, (int)$auth['user_id'], $storeCode,
+            $b['notes'] ?? null, (int)$auth['user_id'],
         ]);
         $newId = (int)$pdo->lastInsertId();
 
         // Insert items
         $itemStmt = $pdo->prepare(
             'INSERT INTO invoice_items
-             (invoice_id, sort_order, product_id, code, description,
-              qty, unit_price, discount_pct, vat_rate, line_net, line_vat, line_total)
-             VALUES (?,?,?,?,?,?,?,?,?,?,?,?)'
+             (invoice_id, line_order, product_code, description,
+              quantity, unit_price, discount_pct, vat_rate, vat_amount, line_total)
+             VALUES (?,?,?,?,?,?,?,?,?,?)'
         );
         foreach ($b['items'] as $i => $item) {
-            $qty      = round((float)($item['qty'] ?? $item['quantity'] ?? 1), 3);
-            $price    = round((float)($item['unit_price'] ?? 0), 2);
-            $discPct  = round((float)($item['discount_pct'] ?? 0), 2);
-            $vatRate  = round((float)($item['vat_rate'] ?? 23), 2);
-            $lineNet  = round($qty * $price * (1 - $discPct / 100), 2);
-            $lineVat  = round($lineNet * $vatRate / 100, 2);
+            $qty       = round((float)($item['quantity'] ?? $item['qty'] ?? 1), 3);
+            $price     = round((float)($item['unit_price'] ?? 0), 2);
+            $discPct   = round((float)($item['discount_pct'] ?? 0), 2);
+            $vatRate   = round((float)($item['vat_rate'] ?? 23), 2);
+            $lineNet   = round($qty * $price * (1 - $discPct / 100), 2);
+            $vatAmount = round($lineNet * $vatRate / 100, 2);
             $itemStmt->execute([
-                $newId, (int)($item['sort_order'] ?? $i),
-                !empty($item['product_id']) ? (int)$item['product_id'] : null,
-                $item['code'] ?? null, $item['description'] ?? '',
-                $qty, $price, $discPct, $vatRate, $lineNet, $lineVat,
-                round($lineNet + $lineVat, 2),
+                $newId, (int)($item['line_order'] ?? $item['sort_order'] ?? $i),
+                $item['product_code'] ?? $item['code'] ?? null,
+                $item['description'] ?? '',
+                $qty, $price, $discPct, $vatRate, $vatAmount,
+                round($lineNet + $vatAmount, 2),
             ]);
         }
 
         // Recalc totals
         $tots = $pdo->prepare(
-            'SELECT SUM(line_net) AS sub, SUM(line_vat) AS vat FROM invoice_items WHERE invoice_id = ?'
+            'SELECT SUM(line_total - vat_amount) AS sub, SUM(vat_amount) AS vat
+             FROM invoice_items WHERE invoice_id = ?'
         );
         $tots->execute([$newId]);
         $t        = $tots->fetch();
@@ -175,21 +173,22 @@ function syncUpdateInvoice(PDO $pdo, array $auth, int $id, array $b): array
 
 function syncCreateCustomer(PDO $pdo, array $auth, array $b): array
 {
-    if (empty($b['name'])) {
-        return ['ok' => false, 'error' => 'Customer name required'];
+    if (empty($b['company_name'] ?? $b['name'])) {
+        return ['ok' => false, 'error' => 'Customer company_name required'];
     }
+    $companyName = trim($b['company_name'] ?? $b['name']);
     $acct = !empty($b['account_no']) ? $b['account_no']
         : ('CUS-' . str_pad(random_int(1000, 9999), 4, '0', STR_PAD_LEFT));
     $pdo->prepare(
         'INSERT INTO customers
-         (account_no, name, email, telephone, address_1, town, created_at, updated_at)
+         (account_no, company_name, email_address, inv_telephone, address_1, inv_town, created_at, updated_at)
          VALUES (?,?,?,?,?,?,NOW(),NOW())'
     )->execute([
-        $acct, trim($b['name']),
-        $b['email']     ?? null,
-        $b['telephone'] ?? null,
-        $b['address_1'] ?? $b['address'] ?? null,
-        $b['town']      ?? null,
+        $acct, $companyName,
+        $b['email_address'] ?? $b['email']     ?? null,
+        $b['inv_telephone'] ?? $b['telephone'] ?? null,
+        $b['address_1']     ?? $b['address']   ?? null,
+        $b['inv_town']      ?? $b['town']       ?? null,
     ]);
     return ['ok' => true, 'entity_id' => (int)$pdo->lastInsertId()];
 }
@@ -203,19 +202,19 @@ function syncUpdateCustomer(PDO $pdo, array $auth, int $id, array $b): array
     }
     $pdo->prepare(
         'UPDATE customers SET
-         name      = COALESCE(?, name),
-         email     = COALESCE(?, email),
-         telephone = COALESCE(?, telephone),
-         address_1 = COALESCE(?, address_1),
-         town      = COALESCE(?, town),
-         updated_at = NOW()
+         company_name  = COALESCE(?, company_name),
+         email_address = COALESCE(?, email_address),
+         inv_telephone = COALESCE(?, inv_telephone),
+         address_1     = COALESCE(?, address_1),
+         inv_town      = COALESCE(?, inv_town),
+         updated_at    = NOW()
          WHERE id = ?'
     )->execute([
-        $b['name']      ?? null,
-        $b['email']     ?? null,
-        $b['telephone'] ?? null,
-        $b['address_1'] ?? $b['address'] ?? null,
-        $b['town']      ?? null,
+        $b['company_name'] ?? $b['name']      ?? null,
+        $b['email_address'] ?? $b['email']    ?? null,
+        $b['inv_telephone'] ?? $b['telephone'] ?? null,
+        $b['address_1']     ?? $b['address']   ?? null,
+        $b['inv_town']      ?? $b['town']       ?? null,
         $id,
     ]);
     return ['ok' => true, 'entity_id' => $id];
@@ -232,7 +231,7 @@ function syncCreatePayment(PDO $pdo, array $auth, array $b): array
         return ['ok' => false, 'error' => 'Amount must be positive'];
     }
     $pdo->prepare(
-        'INSERT INTO payments (invoice_id, amount, payment_date, method, reference, recorded_by, created_at)
+        'INSERT INTO payments (invoice_id, amount, payment_date, method, reference, created_by, created_at)
          VALUES (?,?,?,?,?,?,NOW())'
     )->execute([
         $invoiceId, $amount, $b['payment_date'],
@@ -278,19 +277,20 @@ try {
         foreach ($queue as $idx => $item) {
             $result = applySyncAction($pdo, $auth, $item);
 
-            // Persist to sync_queue (schema: processed_at TIMESTAMP NULL, no error column)
+            // Persist to sync_queue
             try {
                 $pdo->prepare(
                     'INSERT INTO sync_queue
-                     (device_id, action, entity_type, entity_id, payload, processed_at, created_at)
-                     VALUES (?,?,?,?,?,?,NOW())'
+                     (client_id, action, table_name, record_id, payload, queued_at, processed_at, status)
+                     VALUES (?,?,?,?,?,NOW(),?,?)'
                 )->execute([
-                    $deviceId,
+                    $body['device_id'] ?? $body['client_id'] ?? '',
                     $item['action']      ?? '',
-                    $item['entity_type'] ?? '',
+                    $item['entity_type'] ?? $item['table_name'] ?? '',
                     !empty($item['entity_id']) ? (string)$item['entity_id'] : null,
                     json_encode($item['payload'] ?? []),
                     $result['ok'] ? date('Y-m-d H:i:s') : null,
+                    $result['ok'] ? 'done' : 'error',
                 ]);
             } catch (PDOException $e) {
                 error_log('sync_queue insert error: ' . $e->getMessage());
@@ -331,7 +331,7 @@ try {
         $invoices = $stmt->fetchAll();
 
         $stmt = $pdo->prepare(
-            'SELECT id, account_no, name, email, telephone, updated_at
+            'SELECT id, account_no, company_name, email_address, inv_telephone, updated_at
              FROM customers WHERE updated_at > ?
              ORDER BY updated_at ASC LIMIT 1000'
         );

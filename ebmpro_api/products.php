@@ -37,13 +37,13 @@ try {
             $q   = trim($_GET['q']);
             $res = [];
 
-            // Try MATCH AGAINST first (FULLTEXT index is on description column)
+            // Try MATCH AGAINST first (FULLTEXT index is on description, product_code)
             try {
                 $stmt = $pdo->prepare(
-                    'SELECT *, MATCH(description) AGAINST(? IN BOOLEAN MODE) AS score
+                    'SELECT *, MATCH(description, product_code) AGAINST(? IN BOOLEAN MODE) AS score
                      FROM products
                      WHERE active = 1
-                       AND MATCH(description) AGAINST(? IN BOOLEAN MODE)
+                       AND MATCH(description, product_code) AGAINST(? IN BOOLEAN MODE)
                      ORDER BY score DESC
                      LIMIT 20'
                 );
@@ -59,7 +59,7 @@ try {
                 $stmt = $pdo->prepare(
                     'SELECT * FROM products
                      WHERE active = 1
-                       AND (description LIKE ? OR code LIKE ?)
+                       AND (description LIKE ? OR product_code LIKE ?)
                      ORDER BY description ASC
                      LIMIT 20'
                 );
@@ -94,7 +94,7 @@ try {
 
     // ════════════════════════════════════════════════════════════════════════
     // POST — create (admin only)
-    // Schema columns: id, code, description, unit_price, vat_rate, unit, active
+    // Schema columns: id, product_code, description, category, price, vat_rate, unit, active, store_id
     // ════════════════════════════════════════════════════════════════════════
     if ($method === 'POST') {
         requireAdmin($auth);
@@ -105,15 +105,17 @@ try {
         }
 
         $stmt = $pdo->prepare(
-            'INSERT INTO products (code, description, unit_price, vat_rate, unit, active)
-             VALUES (?,?,?,?,?,1)'
+            'INSERT INTO products (product_code, description, category, price, vat_rate, unit, store_id, active)
+             VALUES (?,?,?,?,?,?,?,1)'
         );
         $stmt->execute([
-            $body['code']        ?? null,
+            $body['product_code'] ?? $body['code'] ?? null,
             trim($body['description']),
-            round((float)($body['unit_price'] ?? 0), 2),
-            round((float)($body['vat_rate']   ?? 23), 2),
-            $body['unit']        ?? 'each',
+            $body['category']  ?? null,
+            round((float)($body['price'] ?? $body['unit_price'] ?? 0), 2),
+            round((float)($body['vat_rate'] ?? 23), 2),
+            $body['unit']      ?? 'each',
+            !empty($body['store_id']) ? (int)$body['store_id'] : null,
         ]);
         $newId = (int)$pdo->lastInsertId();
 
@@ -148,18 +150,21 @@ try {
 
         $pdo->prepare(
             'UPDATE products
-             SET code        = COALESCE(?, code),
-                 description = COALESCE(?, description),
-                 unit_price  = COALESCE(?, unit_price),
-                 vat_rate    = COALESCE(?, vat_rate),
-                 unit        = COALESCE(?, unit)
+             SET product_code = COALESCE(?, product_code),
+                 description  = COALESCE(?, description),
+                 category     = COALESCE(?, category),
+                 price        = COALESCE(?, price),
+                 vat_rate     = COALESCE(?, vat_rate),
+                 unit         = COALESCE(?, unit)
              WHERE id = ?'
         )->execute([
-            $body['code']        ?? null,
-            $body['description'] ?? null,
-            isset($body['unit_price']) ? round((float)$body['unit_price'], 2) : null,
+            $body['product_code'] ?? $body['code'] ?? null,
+            $body['description']  ?? null,
+            $body['category']     ?? null,
+            isset($body['price'])      ? round((float)$body['price'],      2) :
+              (isset($body['unit_price']) ? round((float)$body['unit_price'], 2) : null),
             isset($body['vat_rate'])   ? round((float)$body['vat_rate'],   2) : null,
-            $body['unit']        ?? null,
+            $body['unit']         ?? null,
             $id,
         ]);
 

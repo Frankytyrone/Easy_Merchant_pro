@@ -73,7 +73,7 @@ try {
             jsonResponse(['success' => false, 'error' => 'Amount must be greater than zero'], 422);
         }
 
-        $stmt = $pdo->prepare('SELECT id, store_id, balance FROM invoices WHERE id = ?');
+        $stmt = $pdo->prepare('SELECT id, store_code, balance FROM invoices WHERE id = ?');
         $stmt->execute([$invoiceId]);
         $invoice = $stmt->fetch();
         if (!$invoice) {
@@ -82,7 +82,7 @@ try {
 
         $stmt = $pdo->prepare(
             'INSERT INTO payments
-             (invoice_id, amount, payment_date, method, reference, notes, recorded_by, created_at)
+             (invoice_id, amount, payment_date, method, reference, notes, created_by, created_at)
              VALUES (?,?,?,?,?,?,?,NOW())'
         );
         $stmt->execute([
@@ -102,7 +102,7 @@ try {
         $stmt->execute([$newId]);
         $payment = $stmt->fetch();
 
-        auditLog($pdo, (int)$auth['user_id'], $auth['username'], (int)$invoice['store_id'],
+        auditLog($pdo, (int)$auth['user_id'], $auth['username'], $invoice['store_code'],
             'create', 'payment', $newId, null, $payment);
 
         jsonResponse(['success' => true, 'data' => $payment], 201);
@@ -127,12 +127,12 @@ try {
         $pdo->prepare('DELETE FROM payments WHERE id = ?')->execute([$id]);
         syncInvoiceBalance($pdo, (int)$payment['invoice_id']);
 
-        $stmt = $pdo->prepare('SELECT store_id FROM invoices WHERE id = ?');
+        $stmt = $pdo->prepare('SELECT store_code FROM invoices WHERE id = ?');
         $stmt->execute([(int)$payment['invoice_id']]);
         $inv = $stmt->fetch();
 
         auditLog($pdo, (int)$auth['user_id'], $auth['username'],
-            $inv ? (int)$inv['store_id'] : null,
+            $inv ? $inv['store_code'] : null,
             'delete', 'payment', $id, $payment, null);
 
         jsonResponse(['success' => true, 'message' => 'Payment deleted']);

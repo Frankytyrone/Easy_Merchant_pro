@@ -1,4 +1,10 @@
 <?php
+/*
+ * cPanel cron command:
+ * php /home/USERNAME/public_html/cron/send_reminders.php
+ * Replace USERNAME with your actual FastComet cPanel username
+ * App URL: https://shanemcgee.biz/ebmpro/
+ */
 require_once '../ebmpro_api/config.php';
 require_once '../ebmpro_api/PHPMailer/PHPMailer.php';
 require_once '../ebmpro_api/PHPMailer/SMTP.php';
@@ -23,30 +29,27 @@ try {
     exit(1);
 }
 
-// Load SMTP settings
+// Load SMTP settings from key-value settings table
 $settings = [];
 try {
-    $row = $pdo->query('SELECT * FROM settings LIMIT 1')->fetch(PDO::FETCH_ASSOC);
-    if ($row) {
-        $settings = $row;
-    }
+    $rows = $pdo->query('SELECT `key`, value FROM settings')->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($rows as $r) { $settings[$r['key']] = $r['value']; }
 } catch (Exception $e) {
     echo "Could not load settings: " . $e->getMessage() . PHP_EOL;
 }
 
 // Find overdue invoices that have not yet received a reminder today
 $sql = "
-    SELECT i.*, c.name AS customer_name, c.email AS customer_email
+    SELECT i.*, c.company_name AS customer_name, c.email_address AS customer_email
     FROM invoices i
     LEFT JOIN customers c ON i.customer_id = c.id
     WHERE i.status IN ('sent', 'part_paid', 'overdue')
       AND i.due_date < CURDATE()
       AND i.balance > 0
-      AND (i.email_address IS NOT NULL OR c.email IS NOT NULL)
+      AND (i.email_address IS NOT NULL OR c.email_address IS NOT NULL)
       AND NOT EXISTS (
           SELECT 1 FROM email_log el
           WHERE el.invoice_id = i.id
-            AND el.type = 'reminder'
             AND DATE(el.sent_at) = CURDATE()
       )
 ";
@@ -61,9 +64,7 @@ try {
 foreach ($invoices as $invoice) {
     $recipientEmail = !empty($invoice['email_address'])
         ? $invoice['email_address']
-        : $invoice['customer_email'];
-
-    $recipientName = $invoice['customer_name'] ?? '';
+        : $invoice['customer_email'];    $recipientName = $invoice['customer_name'] ?? '';
     $invoiceNumber = $invoice['invoice_number'] ?? $invoice['id'];
     $balance       = number_format((float)$invoice['balance'], 2);
     $dueDate       = $invoice['due_date'];
@@ -98,7 +99,7 @@ foreach ($invoices as $invoice) {
   <p>If you have any queries regarding this invoice, please do not hesitate to contact us.</p>
   <p>Thank you for your business.</p>
   <div class='footer'>This is an automated reminder from Easy Builders Merchant Pro.</div>
-  <img src='" . (defined('APP_URL') ? rtrim(APP_URL, '/') : '') . "/track/open.php?t={$token}' width='1' height='1' alt='' style='display:none;' />
+  <img src='" . (defined('TRACK_URL') ? TRACK_URL : 'https://shanemcgee.biz/track/open.php') . "?t={$token}' width='1' height='1' alt='' style='display:none;' />
 </div>
 </body>
 </html>";
@@ -127,8 +128,8 @@ foreach ($invoices as $invoice) {
 
         // Log in email_log
         $pdo->prepare("
-            INSERT INTO email_log (invoice_id, type, to_email, subject, tracking_token, sent_at, status)
-            VALUES (?, 'reminder', ?, ?, ?, NOW(), 'sent')
+            INSERT INTO email_log (invoice_id, to_email, subject, tracking_token, sent_at, status)
+            VALUES (?, ?, ?, ?, NOW(), 'sent')
         ")->execute([$invoice['id'], $recipientEmail, $subject, $token]);
 
         // Mark invoice as overdue

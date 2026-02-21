@@ -32,26 +32,21 @@ function sendEmail(PDO $pdo, array $params): array
         return ['success' => false, 'error' => 'subject is required'];
     }
 
-    // ── Load SMTP settings from DB (single-row settings table, column-based) ─
-    $stmt = $pdo->query(
-        'SELECT smtp_host, smtp_port, smtp_user, smtp_pass, smtp_from_name FROM settings LIMIT 1'
-    );
-    $smtpRow = $stmt->fetch() ?: [];
+    // ── Load SMTP settings from DB (key-value settings table) ─────────────────
+    $allSettings = getSettings($pdo);
     $smtp = [
-        'smtp_host'       => $smtpRow['smtp_host']      ?? 'localhost',
-        'smtp_port'       => (int)($smtpRow['smtp_port'] ?? 587),
-        'smtp_user'       => $smtpRow['smtp_user']      ?? '',
-        'smtp_pass'       => $smtpRow['smtp_pass']      ?? '',
-        'smtp_from_name'  => $smtpRow['smtp_from_name'] ?? 'Easy Merchant Pro',
+        'smtp_host'       => $allSettings['smtp_host']      ?? 'localhost',
+        'smtp_port'       => (int)($allSettings['smtp_port'] ?? 587),
+        'smtp_user'       => $allSettings['smtp_user']      ?? '',
+        'smtp_pass'       => $allSettings['smtp_pass']      ?? '',
+        'smtp_from_name'  => $allSettings['smtp_from_name'] ?? 'Easy Builders Merchant Pro',
         'smtp_from_email' => null,
     ];
 
     // ── Generate tracking token ────────────────────────────────────────────
     $trackingToken = bin2hex(random_bytes(16));
-    $domain        = $_SERVER['HTTP_HOST'] ?? 'localhost';
-    $scheme        = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-    $trackingPixel = '<img src="' . $scheme . '://' . htmlspecialchars($domain, ENT_QUOTES, 'UTF-8')
-        . '/track/open.php?t=' . $trackingToken . '" width="1" height="1" alt="" />';
+    $trackUrl      = defined('TRACK_URL') ? TRACK_URL : 'https://shanemcgee.biz/track/open.php';
+    $trackingPixel = '<img src="' . $trackUrl . '?t=' . $trackingToken . '" width="1" height="1" alt="">';
 
     $htmlBody = $message . "\n" . $trackingPixel;
 
@@ -76,7 +71,7 @@ function sendEmail(PDO $pdo, array $params): array
         $mail->Password   = $smtp['smtp_pass'];
         $mail->SMTPSecure = 'tls';
 
-        $fromEmail = $smtp['smtp_from_email'] ?? ('noreply@' . $domain);
+        $fromEmail = $smtp['smtp_from_email'] ?? ('noreply@' . ($_SERVER['HTTP_HOST'] ?? 'localhost'));
         $fromName  = $smtp['smtp_from_name'];
 
         $mail->setFrom($fromEmail, $fromName);
@@ -89,19 +84,19 @@ function sendEmail(PDO $pdo, array $params): array
 
         $mail->send();
 
-        // ── Log to email_log (schema: no message_id column) ───────────────────
+        // ── Log to email_log ──────────────────────────────────────────────────
         $logStmt = $pdo->prepare(
             'INSERT INTO email_log
-             (invoice_id, to_email, subject, type, tracking_token, sent_at, status)
-             VALUES (?,?,?,?,?,NOW(),?)'
+             (invoice_id, to_email, subject, tracking_token, sent_at, status)
+             VALUES (?,?,?,?,NOW(),?)'
         );
-        $logStmt->execute([$invoiceId, $toEmail, $subject, $type, $trackingToken, 'sent']);
+        $logStmt->execute([$invoiceId, $toEmail, $subject, $trackingToken, 'sent']);
 
-        // ── Update invoice record ──────────────────────────────────────────
+        // ── Update invoice email tracking ──────────────────────────────────
         if ($invoiceId) {
             $pdo->prepare(
-                'UPDATE invoices SET email_sent_at = NOW(), email_tracking_token = ? WHERE id = ?'
-            )->execute([$trackingToken, $invoiceId]);
+                'UPDATE invoices SET email_sent_at = NOW() WHERE id = ?'
+            )->execute([$invoiceId]);
         }
 
         return ['success' => true, 'tracking_token' => $trackingToken];

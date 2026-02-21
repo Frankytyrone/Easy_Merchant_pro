@@ -44,7 +44,7 @@ try {
 
         if (!empty($_GET['q'])) {
             $like     = '%' . $_GET['q'] . '%';
-            $where[]  = '(name LIKE ? OR account_no LIKE ? OR email LIKE ? OR telephone LIKE ?)';
+            $where[]  = '(company_name LIKE ? OR account_no LIKE ? OR email_address LIKE ? OR inv_telephone LIKE ?)';
             $params[] = $like;
             $params[] = $like;
             $params[] = $like;
@@ -52,7 +52,7 @@ try {
         }
 
         $sql  = 'SELECT * FROM customers WHERE ' . implode(' AND ', $where)
-              . ' ORDER BY name ASC LIMIT 500';
+              . ' ORDER BY company_name ASC LIMIT 500';
         $stmt = $pdo->prepare($sql);
         $stmt->execute($params);
         jsonResponse(['success' => true, 'data' => $stmt->fetchAll()]);
@@ -64,8 +64,8 @@ try {
     if ($method === 'POST') {
         $body = json_decode(file_get_contents('php://input'), true) ?? [];
 
-        if (empty($body['name'])) {
-            jsonResponse(['success' => false, 'error' => 'name is required'], 422);
+        if (empty($body['company_name'] ?? $body['name'])) {
+            jsonResponse(['success' => false, 'error' => 'company_name is required'], 422);
         }
 
         $accountNo = !empty($body['account_no'])
@@ -79,26 +79,30 @@ try {
             jsonResponse(['success' => false, 'error' => 'account_no already exists'], 409);
         }
 
+        $companyName = trim($body['company_name'] ?? $body['name']);
         $stmt = $pdo->prepare(
             'INSERT INTO customers
-             (account_no, name, email, telephone,
-              address_1, address_2, address_3, town, region, eircode,
-              is_cash_sale, notes, created_at, updated_at)
-             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,NOW(),NOW())'
+             (account_no, customer_code, company_name, contact_name, email_address, inv_telephone,
+              address_1, address_2, address_3, inv_town, inv_region, inv_postcode,
+              vat_registered, payment_terms, notes, created_at, updated_at)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NOW(),NOW())'
         );
         $stmt->execute([
             $accountNo,
-            trim($body['name']),
-            $body['email']       ?? null,
-            $body['telephone']   ?? null,
-            $body['address_1']   ?? null,
-            $body['address_2']   ?? null,
-            $body['address_3']   ?? null,
-            $body['town']        ?? null,
-            $body['region']      ?? null,
-            $body['eircode']     ?? null,
-            isset($body['is_cash_sale']) ? (int)(bool)$body['is_cash_sale'] : 0,
-            $body['notes']       ?? null,
+            $body['customer_code'] ?? $accountNo,
+            $companyName,
+            $body['contact_name']   ?? null,
+            $body['email_address']  ?? $body['email']     ?? null,
+            $body['inv_telephone']  ?? $body['telephone'] ?? null,
+            $body['address_1']      ?? null,
+            $body['address_2']      ?? null,
+            $body['address_3']      ?? null,
+            $body['inv_town']       ?? $body['town']      ?? null,
+            $body['inv_region']     ?? $body['region']    ?? null,
+            $body['inv_postcode']   ?? $body['eircode']   ?? null,
+            isset($body['vat_registered']) ? (int)(bool)$body['vat_registered'] : 0,
+            $body['payment_terms']  ?? null,
+            $body['notes']          ?? null,
         ]);
         $newId = (int)$pdo->lastInsertId();
 
@@ -132,31 +136,35 @@ try {
 
         $pdo->prepare(
             'UPDATE customers
-             SET name        = COALESCE(?, name),
-                 email       = COALESCE(?, email),
-                 telephone   = COALESCE(?, telephone),
-                 address_1   = COALESCE(?, address_1),
-                 address_2   = COALESCE(?, address_2),
-                 address_3   = COALESCE(?, address_3),
-                 town        = COALESCE(?, town),
-                 region      = COALESCE(?, region),
-                 eircode     = COALESCE(?, eircode),
-                 is_cash_sale = COALESCE(?, is_cash_sale),
-                 notes       = COALESCE(?, notes),
-                 updated_at  = NOW()
+             SET company_name    = COALESCE(?, company_name),
+                 contact_name    = COALESCE(?, contact_name),
+                 email_address   = COALESCE(?, email_address),
+                 inv_telephone   = COALESCE(?, inv_telephone),
+                 address_1       = COALESCE(?, address_1),
+                 address_2       = COALESCE(?, address_2),
+                 address_3       = COALESCE(?, address_3),
+                 inv_town        = COALESCE(?, inv_town),
+                 inv_region      = COALESCE(?, inv_region),
+                 inv_postcode    = COALESCE(?, inv_postcode),
+                 vat_registered  = COALESCE(?, vat_registered),
+                 payment_terms   = COALESCE(?, payment_terms),
+                 notes           = COALESCE(?, notes),
+                 updated_at      = NOW()
              WHERE id = ?'
         )->execute([
-            $body['name']         ?? null,
-            $body['email']        ?? null,
-            $body['telephone']    ?? null,
-            $body['address_1']    ?? null,
-            $body['address_2']    ?? null,
-            $body['address_3']    ?? null,
-            $body['town']         ?? null,
-            $body['region']       ?? null,
-            $body['eircode']      ?? null,
-            isset($body['is_cash_sale']) ? (int)(bool)$body['is_cash_sale'] : null,
-            $body['notes']        ?? null,
+            $body['company_name']   ?? $body['name']      ?? null,
+            $body['contact_name']   ?? null,
+            $body['email_address']  ?? $body['email']     ?? null,
+            $body['inv_telephone']  ?? $body['telephone'] ?? null,
+            $body['address_1']      ?? null,
+            $body['address_2']      ?? null,
+            $body['address_3']      ?? null,
+            $body['inv_town']       ?? $body['town']      ?? null,
+            $body['inv_region']     ?? $body['region']    ?? null,
+            $body['inv_postcode']   ?? $body['eircode']   ?? null,
+            isset($body['vat_registered']) ? (int)(bool)$body['vat_registered'] : null,
+            $body['payment_terms']  ?? null,
+            $body['notes']          ?? null,
             $id,
         ]);
 

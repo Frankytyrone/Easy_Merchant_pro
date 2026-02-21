@@ -21,7 +21,7 @@ function storeCode(PDO $pdo, int $storeId): string
 function recalcTotals(PDO $pdo, int $invoiceId): array
 {
     $stmt = $pdo->prepare(
-        'SELECT SUM(line_net) AS subtotal, SUM(line_vat) AS vat_total
+        'SELECT SUM(line_total - vat_amount) AS subtotal, SUM(vat_amount) AS vat_total
          FROM invoice_items WHERE invoice_id = ?'
     );
     $stmt->execute([$invoiceId]);
@@ -51,49 +51,41 @@ function insertItems(PDO $pdo, int $invoiceId, array $items): void
 {
     $stmt = $pdo->prepare(
         'INSERT INTO invoice_items
-         (invoice_id, sort_order, product_id, code, description,
-          qty, unit_price, discount_pct, vat_rate, line_net, line_vat, line_total)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+         (invoice_id, line_order, product_code, description,
+          quantity, unit_price, discount_pct, vat_rate, vat_amount, line_total)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
     );
     foreach ($items as $i => $item) {
-        $qty         = round((float)($item['qty']          ?? $item['quantity'] ?? 1), 3);
-        $price       = round((float)($item['unit_price']   ?? 0), 2);
-        $discPct     = round((float)($item['discount_pct'] ?? 0), 2);
-        $vatRate     = round((float)($item['vat_rate']     ?? 23), 2);
-        $lineNet     = round($qty * $price * (1 - $discPct / 100), 2);
-        $lineVat     = round($lineNet * $vatRate / 100, 2);
-        $lineTotal   = round($lineNet + $lineVat, 2);
+        $qty       = round((float)($item['quantity']    ?? $item['qty'] ?? 1), 3);
+        $price     = round((float)($item['unit_price']  ?? 0), 2);
+        $discPct   = round((float)($item['discount_pct'] ?? 0), 2);
+        $vatRate   = round((float)($item['vat_rate']    ?? 23), 2);
+        $lineNet   = round($qty * $price * (1 - $discPct / 100), 2);
+        $vatAmount = round($lineNet * $vatRate / 100, 2);
+        $lineTotal = round($lineNet + $vatAmount, 2);
 
         $stmt->execute([
             $invoiceId,
-            (int)($item['sort_order'] ?? $i),
-            !empty($item['product_id']) ? (int)$item['product_id'] : null,
-            $item['code']        ?? null,
+            (int)($item['line_order'] ?? $item['sort_order'] ?? $i),
+            $item['product_code'] ?? $item['code'] ?? null,
             $item['description'] ?? '',
             $qty,
             $price,
             $discPct,
             $vatRate,
-            $lineNet,
-            $lineVat,
+            $vatAmount,
             $lineTotal,
         ]);
     }
 }
 
 // ── Helper: generate next invoice number ─────────────────────────────────────
-// invoice_sequences: store_code PK, last_invoice_number, last_quote_number
-// Prefix comes from settings table columns (invoice_prefix_{store_code}).
-function nextInvoiceNumber(PDO $pdo, int $storeId, string $type): string
+// invoice_sequences: store_code PK, next_invoice_num, next_quote_num
+// Prefix comes from stores table (invoice_prefix / quote_prefix columns).
+function nextInvoiceNumber(PDO $pdo, string $storeCode, string $type): string
 {
-    // Resolve store code
-    $sStmt = $pdo->prepare('SELECT code FROM stores WHERE id = ? LIMIT 1');
-    $sStmt->execute([$storeId]);
-    $storeRow  = $sStmt->fetch();
-    $storeCode = $storeRow ? $storeRow['code'] : 'store';
-
-    $seqCol    = ($type === 'quote') ? 'last_quote_number' : 'last_invoice_number';
-    $prefixCol = 'invoice_prefix_' . $storeCode;
+    $seqCol    = ($type === 'quote') ? 'next_quote_num' : 'next_invoice_num';
+    $prefixCol = ($type === 'quote') ? 'quote_prefix'   : 'invoice_prefix';
 
     $pdo->beginTransaction();
     try {
@@ -105,35 +97,28 @@ function nextInvoiceNumber(PDO $pdo, int $storeId, string $type): string
         $seq = $stmt->fetch();
 
         if (!$seq) {
-            // Insert a default row if missing
             $pdo->prepare(
-                'INSERT INTO invoice_sequences (store_code, last_invoice_number, last_quote_number)
-                 VALUES (?, 1000, 1000)'
+                'INSERT INTO invoice_sequences (store_code, next_invoice_num, next_quote_num)
+                 VALUES (?,1001,1001)'
             )->execute([$storeCode]);
-            $last = 1000;
+            $current = 1001;
         } else {
-            $last = (int)$seq[$seqCol];
+            $current = (int)$seq[$seqCol];
         }
 
-        $next = $last + 1;
+        // Increment the stored next number
         $pdo->prepare("UPDATE invoice_sequences SET {$seqCol} = ? WHERE store_code = ?")
-            ->execute([$next, $storeCode]);
+            ->execute([$current + 1, $storeCode]);
 
         $pdo->commit();
 
-        // Fetch prefix from settings
-        $prefix = strtoupper(substr($storeCode, 0, 3));
-        try {
-            $ps = $pdo->query("SELECT {$prefixCol} FROM settings LIMIT 1");
-            $pr = $ps->fetch();
-            if ($pr && !empty($pr[$prefixCol])) {
-                $prefix = $pr[$prefixCol];
-            }
-        } catch (PDOException $e) {
-            // settings column may not exist; use default
-        }
+        // Fetch prefix from stores table
+        $storeRow2 = $pdo->prepare('SELECT ' . $prefixCol . ' FROM stores WHERE code = ? LIMIT 1');
+        $storeRow2->execute([$storeCode]);
+        $pr     = $storeRow2->fetch();
+        $prefix = $pr ? ($pr[$prefixCol] ?? strtoupper(substr($storeCode, 0, 3))) : strtoupper(substr($storeCode, 0, 3));
 
-        return $prefix . '-' . str_pad($next, 4, '0', STR_PAD_LEFT);
+        return $prefix . '-' . str_pad($current, 4, '0', STR_PAD_LEFT);
     } catch (Throwable $e) {
         $pdo->rollBack();
         throw $e;
@@ -144,7 +129,7 @@ function nextInvoiceNumber(PDO $pdo, int $storeId, string $type): string
 function fetchInvoiceFull(PDO $pdo, int $id): ?array
 {
     $stmt = $pdo->prepare(
-        'SELECT i.*, c.name AS customer_name, c.email AS customer_email
+        'SELECT i.*, c.company_name AS customer_name, c.email_address AS customer_email
          FROM invoices i
          LEFT JOIN customers c ON c.id = i.customer_id
          WHERE i.id = ?'
@@ -156,7 +141,7 @@ function fetchInvoiceFull(PDO $pdo, int $id): ?array
     }
 
     $stmt = $pdo->prepare(
-        'SELECT * FROM invoice_items WHERE invoice_id = ? ORDER BY sort_order ASC, id ASC'
+        'SELECT * FROM invoice_items WHERE invoice_id = ? ORDER BY line_order ASC, id ASC'
     );
     $stmt->execute([$id]);
     $inv['items'] = $stmt->fetchAll();
@@ -188,20 +173,21 @@ try {
         $where  = ["i.status != 'cancelled'"];
         $params = [];
 
-        if (!empty($_GET['store_id']))    { $where[] = 'i.store_id = ?';      $params[] = (int)$_GET['store_id']; }
+        if (!empty($_GET['store_code']))   { $where[] = 'i.store_code = ?';     $params[] = $_GET['store_code']; }
+        if (!empty($_GET['store_id']))     { $where[] = 'i.store_code = ?';     $params[] = $_GET['store_id']; }
         if (!empty($_GET['status']))      { $where[] = 'i.status = ?';        $params[] = $_GET['status']; }
         if (!empty($_GET['type']))        { $where[] = 'i.invoice_type = ?';  $params[] = $_GET['type']; }
         if (!empty($_GET['customer_id'])) { $where[] = 'i.customer_id = ?';   $params[] = (int)$_GET['customer_id']; }
         if (!empty($_GET['date_from']))   { $where[] = 'i.invoice_date >= ?'; $params[] = $_GET['date_from']; }
         if (!empty($_GET['date_to']))     { $where[] = 'i.invoice_date <= ?'; $params[] = $_GET['date_to']; }
         if (!empty($_GET['search'])) {
-            $where[]  = '(i.invoice_number LIKE ? OR c.name LIKE ?)';
+            $where[]  = '(i.invoice_number LIKE ? OR c.company_name LIKE ?)';
             $like     = '%' . $_GET['search'] . '%';
             $params[] = $like;
             $params[] = $like;
         }
 
-        $sql = 'SELECT i.*, c.name AS customer_name
+        $sql = 'SELECT i.*, c.company_name AS customer_name
                 FROM invoices i
                 LEFT JOIN customers c ON c.id = i.customer_id
                 WHERE ' . implode(' AND ', $where) . '
@@ -232,13 +218,13 @@ try {
             if (!$quote) {
                 jsonResponse(['success' => false, 'error' => 'Quote not found'], 404);
             }
-            $newNumber = nextInvoiceNumber($pdo, (int)$quote['store_id'], 'invoice');
+            $newNumber = nextInvoiceNumber($pdo, $quote['store_code'], 'invoice');
             $pdo->prepare(
                 "UPDATE invoices SET invoice_type = 'invoice', invoice_number = ?,
                  status = 'sent', updated_at = NOW() WHERE id = ?"
             )->execute([$newNumber, $id]);
 
-            $sc = storeCode($pdo, (int)$quote['store_id']);
+            $sc = $quote['store_code'];
             auditLog($pdo, (int)$auth['user_id'], $auth['username'], $sc,
                 'convert_quote', 'invoice', $id,
                 ['invoice_type' => 'quote', 'invoice_number' => $quote['invoice_number']],
@@ -261,29 +247,26 @@ try {
         $type      = in_array($body['type'] ?? $body['invoice_type'] ?? '', ['invoice','quote','credit_note'], true)
                        ? ($body['type'] ?? $body['invoice_type']) : 'invoice';
         $storeId   = (int)$body['store_id'];
-        $invNumber = nextInvoiceNumber($pdo, $storeId, $type);
         $sc        = storeCode($pdo, $storeId);
+        $invNumber = nextInvoiceNumber($pdo, $sc, $type);
 
         $stmt = $pdo->prepare(
             'INSERT INTO invoices
-             (invoice_number, store_id, invoice_type, status, customer_id,
-              cash_sale_name, invoice_date, due_date, notes, internal_notes,
-              created_by, created_store_context, created_at, updated_at)
-             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,NOW(),NOW())'
+             (invoice_number, store_code, invoice_type, status, customer_id,
+              invoice_date, due_date, notes,
+              created_by, created_at, updated_at)
+             VALUES (?,?,?,?,?,?,?,?,?,NOW(),NOW())'
         );
         $stmt->execute([
             $invNumber,
-            $storeId,
+            $sc,
             $type,
             'draft',
             (int)$body['customer_id'],
-            $body['cash_sale_name']  ?? null,
             $body['invoice_date'],
-            $body['due_date']        ?? null,
-            $body['notes']           ?? null,
-            $body['internal_notes']  ?? null,
+            $body['due_date']  ?? null,
+            $body['notes']     ?? null,
             (int)$auth['user_id'],
-            $sc,
         ]);
         $newId = (int)$pdo->lastInsertId();
 
@@ -329,7 +312,6 @@ try {
                  due_date       = COALESCE(?, due_date),
                  status         = COALESCE(?, status),
                  notes          = ?,
-                 internal_notes = COALESCE(?, internal_notes),
                  updated_at     = NOW()
              WHERE id = ?'
         )->execute([
@@ -338,7 +320,6 @@ try {
             $body['due_date']        ?? null,
             $body['status']          ?? null,
             $body['notes']           ?? $old['notes'],
-            $body['internal_notes']  ?? null,
             $id,
         ]);
 
@@ -352,7 +333,7 @@ try {
         $stmt->execute([$id]);
         $new = $stmt->fetch();
 
-        $sc     = storeCode($pdo, (int)$old['store_id']);
+        $sc     = $old['store_code'];
         $action = 'update' . ($backdated ? '_backdated' : '');
         auditLog($pdo, (int)$auth['user_id'], $auth['username'], $sc,
             $action, 'invoice', $id, $old, $new);
@@ -378,7 +359,7 @@ try {
             "UPDATE invoices SET status = 'cancelled', updated_at = NOW() WHERE id = ?"
         )->execute([$id]);
 
-        $sc = storeCode($pdo, (int)$old['store_id']);
+        $sc = $old['store_code'];
         auditLog($pdo, (int)$auth['user_id'], $auth['username'], $sc,
             'delete', 'invoice', $id,
             ['status' => $old['status']], ['status' => 'cancelled']);

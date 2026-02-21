@@ -3,48 +3,38 @@ SET NAMES utf8mb4;
 SET time_zone = '+00:00';
 SET foreign_key_checks = 0;
 
--- Settings
-CREATE TABLE IF NOT EXISTS settings (
+-- Stores
+CREATE TABLE IF NOT EXISTS stores (
   id INT PRIMARY KEY AUTO_INCREMENT,
-  shop_name VARCHAR(100),
+  code VARCHAR(10) UNIQUE NOT NULL,
+  name VARCHAR(100) NOT NULL,
   address_1 VARCHAR(100),
   address_2 VARCHAR(100),
   town VARCHAR(50),
   county VARCHAR(50),
   eircode VARCHAR(10),
   phone VARCHAR(20),
-  email VARCHAR(100),
-  vat_no VARCHAR(20),
-  smtp_host VARCHAR(100),
-  smtp_port INT DEFAULT 587,
-  smtp_user VARCHAR(100),
-  smtp_pass VARCHAR(100),
-  smtp_from_name VARCHAR(100),
-  invoice_prefix_falcarragh VARCHAR(10) DEFAULT 'FAL',
-  invoice_prefix_gweedore VARCHAR(10) DEFAULT 'GWE',
-  invoice_start_falcarragh INT DEFAULT 1001,
-  invoice_start_gweedore INT DEFAULT 1001,
-  stock_module_enabled TINYINT DEFAULT 0,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  invoice_prefix VARCHAR(10) DEFAULT 'INV',
+  quote_prefix VARCHAR(10) DEFAULT 'QUO',
+  next_invoice_num INT DEFAULT 1001,
+  next_quote_num INT DEFAULT 1001
 );
+INSERT IGNORE INTO stores (code, name) VALUES
+  ('FAL', 'Easy Builders Merchant — Falcarragh'),
+  ('GWE', 'Easy Builders Merchant — Gweedore');
 
--- Stores
-CREATE TABLE IF NOT EXISTS stores (
+-- Settings (key-value store)
+CREATE TABLE IF NOT EXISTS settings (
   id INT PRIMARY KEY AUTO_INCREMENT,
-  code VARCHAR(20) UNIQUE NOT NULL,
-  name VARCHAR(100) NOT NULL,
-  address TEXT,
-  phone VARCHAR(20),
-  email VARCHAR(100)
+  `key` VARCHAR(100) UNIQUE NOT NULL,
+  value TEXT
 );
-INSERT IGNORE INTO stores (code, name) VALUES ('falcarragh', 'Falcarragh'), ('gweedore', 'Gweedore');
 
 -- Users
 CREATE TABLE IF NOT EXISTS users (
   id INT PRIMARY KEY AUTO_INCREMENT,
   username VARCHAR(50) UNIQUE NOT NULL,
   password_hash VARCHAR(255) NOT NULL,
-  full_name VARCHAR(100),
   role ENUM('admin','manager','counter') DEFAULT 'counter',
   store_id INT,
   active TINYINT DEFAULT 1,
@@ -62,59 +52,66 @@ CREATE TABLE IF NOT EXISTS login_attempts (
 -- Customers
 CREATE TABLE IF NOT EXISTS customers (
   id INT PRIMARY KEY AUTO_INCREMENT,
-  account_no VARCHAR(20) UNIQUE,
-  name VARCHAR(100) NOT NULL,
+  customer_code VARCHAR(20),
+  company_name VARCHAR(100),
+  contact_name VARCHAR(100),
   address_1 VARCHAR(100),
   address_2 VARCHAR(100),
   address_3 VARCHAR(100),
-  town VARCHAR(50),
-  region VARCHAR(50),
-  eircode VARCHAR(10),
-  email VARCHAR(100),
-  telephone VARCHAR(20),
-  delivery_preference ENUM('email','post','both') DEFAULT 'email',
-  is_cash_sale TINYINT DEFAULT 0,
+  inv_town VARCHAR(50),
+  inv_region VARCHAR(50),
+  inv_postcode VARCHAR(10),
+  email_address VARCHAR(100),
+  inv_telephone VARCHAR(20),
+  account_no VARCHAR(20),
+  vat_registered TINYINT DEFAULT 0,
+  payment_terms VARCHAR(50),
   notes TEXT,
+  store_id INT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  INDEX idx_name (name),
+  INDEX idx_company (company_name),
   INDEX idx_account (account_no)
 );
 
 -- Products
 CREATE TABLE IF NOT EXISTS products (
   id INT PRIMARY KEY AUTO_INCREMENT,
-  code VARCHAR(50),
+  product_code VARCHAR(50),
   description VARCHAR(255) NOT NULL,
-  unit_price DECIMAL(10,2) DEFAULT 0.00,
+  category VARCHAR(100),
+  price DECIMAL(10,2) DEFAULT 0.00,
   vat_rate DECIMAL(5,2) DEFAULT 23.00,
   unit VARCHAR(20) DEFAULT 'each',
   active TINYINT DEFAULT 1,
-  INDEX idx_code (code),
-  FULLTEXT INDEX idx_description (description),
+  store_id INT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FULLTEXT INDEX idx_ft (description, product_code),
   INDEX idx_active (active)
 );
+
+-- Invoice sequences (per store, for atomic numbering)
+CREATE TABLE IF NOT EXISTS invoice_sequences (
+  store_code VARCHAR(10) UNIQUE NOT NULL,
+  next_invoice_num INT DEFAULT 1001,
+  next_quote_num INT DEFAULT 1001
+);
+INSERT IGNORE INTO invoice_sequences (store_code) VALUES ('FAL'), ('GWE');
 
 -- Invoices
 CREATE TABLE IF NOT EXISTS invoices (
   id INT PRIMARY KEY AUTO_INCREMENT,
-  invoice_number VARCHAR(20) UNIQUE NOT NULL,
-  store_id INT NOT NULL,
-  invoice_type ENUM('invoice','quote','credit_note') DEFAULT 'invoice',
-  status ENUM('draft','sent','part_paid','paid','overdue','cancelled') DEFAULT 'draft',
+  invoice_number VARCHAR(30) UNIQUE NOT NULL,
+  invoice_type ENUM('invoice','quote','credit') DEFAULT 'invoice',
+  store_code VARCHAR(10) NOT NULL,
   customer_id INT,
-  cash_sale_name VARCHAR(100),
   invoice_date DATE NOT NULL,
   due_date DATE,
-  inv_name VARCHAR(100),
-  inv_address_1 VARCHAR(100),
-  inv_address_2 VARCHAR(100),
-  inv_address_3 VARCHAR(100),
   inv_town VARCHAR(50),
   inv_region VARCHAR(50),
   inv_postcode VARCHAR(10),
-  inv_telephone VARCHAR(20),
   email_address VARCHAR(100),
+  inv_telephone VARCHAR(20),
   inv_del_client_name VARCHAR(100),
   inv_del_alternative_name VARCHAR(100),
   inv_del_address_1 VARCHAR(100),
@@ -127,37 +124,36 @@ CREATE TABLE IF NOT EXISTS invoices (
   total DECIMAL(10,2) DEFAULT 0.00,
   amount_paid DECIMAL(10,2) DEFAULT 0.00,
   balance DECIMAL(10,2) DEFAULT 0.00,
+  status ENUM('draft','pending','part_paid','paid','overdue','cancelled') DEFAULT 'draft',
+  payment_terms VARCHAR(50),
   notes TEXT,
-  internal_notes TEXT,
+  is_backdated TINYINT DEFAULT 0,
   email_sent_at DATETIME,
   email_opened_at DATETIME,
-  email_tracking_token VARCHAR(64),
+  reminder_sent_at DATETIME,
   created_by INT,
-  created_store_context VARCHAR(20),
+  updated_by INT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  INDEX idx_store (store_id),
+  INDEX idx_store (store_code),
   INDEX idx_customer (customer_id),
   INDEX idx_date (invoice_date),
-  INDEX idx_status (status),
-  INDEX idx_number (invoice_number)
+  INDEX idx_status (status)
 );
 
 -- Invoice Line Items
 CREATE TABLE IF NOT EXISTS invoice_items (
   id INT PRIMARY KEY AUTO_INCREMENT,
   invoice_id INT NOT NULL,
-  sort_order INT DEFAULT 0,
-  product_id INT,
-  code VARCHAR(50),
+  line_order INT DEFAULT 0,
+  product_code VARCHAR(50),
   description VARCHAR(255),
-  qty DECIMAL(10,3) DEFAULT 1.000,
+  vat_rate DECIMAL(5,2) DEFAULT 23.00,
+  quantity DECIMAL(10,3) DEFAULT 1.000,
   unit_price DECIMAL(10,2) DEFAULT 0.00,
   discount_pct DECIMAL(5,2) DEFAULT 0.00,
-  vat_rate DECIMAL(5,2) DEFAULT 23.00,
-  line_net DECIMAL(10,2) DEFAULT 0.00,
-  line_vat DECIMAL(10,2) DEFAULT 0.00,
   line_total DECIMAL(10,2) DEFAULT 0.00,
+  vat_amount DECIMAL(10,2) DEFAULT 0.00,
   INDEX idx_invoice (invoice_id)
 );
 
@@ -165,32 +161,14 @@ CREATE TABLE IF NOT EXISTS invoice_items (
 CREATE TABLE IF NOT EXISTS payments (
   id INT PRIMARY KEY AUTO_INCREMENT,
   invoice_id INT NOT NULL,
-  amount DECIMAL(10,2) NOT NULL,
   payment_date DATE NOT NULL,
+  amount DECIMAL(10,2) NOT NULL,
   method ENUM('cash','card','cheque','bank_transfer','other') DEFAULT 'cash',
   reference VARCHAR(100),
   notes TEXT,
-  recorded_by INT,
+  created_by INT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   INDEX idx_invoice (invoice_id)
-);
-
--- Audit Trail
-CREATE TABLE IF NOT EXISTS audit_log (
-  id INT PRIMARY KEY AUTO_INCREMENT,
-  user_id INT,
-  user_name VARCHAR(100),
-  store_context VARCHAR(20),
-  action VARCHAR(50),
-  entity_type VARCHAR(50),
-  entity_id INT,
-  old_values JSON,
-  new_values JSON,
-  ip_address VARCHAR(45),
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  INDEX idx_entity (entity_type, entity_id),
-  INDEX idx_user (user_id),
-  INDEX idx_created (created_at)
 );
 
 -- Email Log
@@ -200,34 +178,55 @@ CREATE TABLE IF NOT EXISTS email_log (
   customer_id INT,
   to_email VARCHAR(100),
   subject VARCHAR(255),
-  type ENUM('invoice','reminder','statement','quote') DEFAULT 'invoice',
-  tracking_token VARCHAR(64) UNIQUE,
   sent_at DATETIME,
   opened_at DATETIME,
-  bounced_at DATETIME,
   status ENUM('sent','opened','bounced','failed') DEFAULT 'sent',
-  INDEX idx_invoice (invoice_id),
-  INDEX idx_token (tracking_token)
+  tracking_token VARCHAR(64) UNIQUE,
+  INDEX idx_invoice (invoice_id)
 );
 
--- Invoice number sequences
-CREATE TABLE IF NOT EXISTS invoice_sequences (
-  store_code VARCHAR(20) PRIMARY KEY,
-  last_invoice_number INT DEFAULT 1000,
-  last_quote_number INT DEFAULT 1000
+-- Audit Log
+CREATE TABLE IF NOT EXISTS audit_log (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  user_id INT,
+  username VARCHAR(100),
+  store_code VARCHAR(10),
+  action VARCHAR(50),
+  table_name VARCHAR(50),
+  record_id INT,
+  old_value JSON,
+  new_value JSON,
+  ip_address VARCHAR(45),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_table_record (table_name, record_id),
+  INDEX idx_created (created_at)
 );
-INSERT IGNORE INTO invoice_sequences (store_code) VALUES ('falcarragh'), ('gweedore');
 
--- Offline sync queue
+-- Sync Queue (offline support)
 CREATE TABLE IF NOT EXISTS sync_queue (
   id INT PRIMARY KEY AUTO_INCREMENT,
-  device_id VARCHAR(64),
+  client_id VARCHAR(64),
   action VARCHAR(50),
-  entity_type VARCHAR(50),
-  entity_id VARCHAR(50),
+  table_name VARCHAR(50),
+  record_id VARCHAR(50),
   payload JSON,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  queued_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   processed_at TIMESTAMP NULL,
-  INDEX idx_device (device_id),
-  INDEX idx_processed (processed_at)
+  status ENUM('pending','done','error') DEFAULT 'pending',
+  INDEX idx_status (status)
+);
+
+-- Stock movements (disabled by default; enabled via settings)
+CREATE TABLE IF NOT EXISTS tbl_stock (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  product_id INT,
+  store_code VARCHAR(10),
+  movement_type ENUM('in','out','adjust') DEFAULT 'in',
+  quantity DECIMAL(10,3),
+  reference VARCHAR(100),
+  notes TEXT,
+  created_by INT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_product (product_id),
+  INDEX idx_store (store_code)
 );

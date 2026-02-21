@@ -36,8 +36,8 @@ const Product = (() => {
         const all = await DB.getAll('products');
         const q   = key;
         const results = all.filter(p =>
-          (p.code        || '').toLowerCase().includes(q) ||
-          (p.description || '').toLowerCase().includes(q)
+          (p.product_code || p.code || '').toLowerCase().includes(q) ||
+          (p.description  || '').toLowerCase().includes(q)
         ).slice(0, 20);
         return results;
       } catch { return []; }
@@ -68,10 +68,10 @@ const Product = (() => {
       li.setAttribute('role', 'option');
       li.setAttribute('data-idx', String(idx));
       li.innerHTML = `
-        <span class="item-code">${escapeHtml(prod.code || '')}</span>
+        <span class="item-code">${escapeHtml(prod.product_code || prod.code || '')}</span>
         ${escapeHtml(prod.description || '')}
         <span class="item-vat">${prod.vat_rate || 0}% VAT</span>
-        <span class="item-price">${fmt(prod.unit_price)}</span>
+        <span class="item-price">${fmt(prod.price ?? prod.unit_price)}</span>
       `;
       li.addEventListener('mousedown', e => {
         e.preventDefault();

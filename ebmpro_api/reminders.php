@@ -39,7 +39,7 @@ try {
         $stmt = $pdo->prepare(
             "SELECT i.id, i.invoice_number, i.invoice_date, i.due_date,
                     i.total, i.balance, i.email_sent_at,
-                    c.id AS customer_id, c.name AS customer_name, c.email AS customer_email
+                    c.id AS customer_id, c.company_name AS customer_name, c.email_address AS customer_email
              FROM invoices i
              JOIN customers c ON c.id = i.customer_id
              WHERE i.status IN ('sent','part_paid')
@@ -65,7 +65,7 @@ try {
         }
 
         $stmt = $pdo->prepare(
-            'SELECT i.*, c.name AS customer_name, c.email AS customer_email
+            'SELECT i.*, c.company_name AS customer_name, c.email_address AS customer_email
              FROM invoices i
              JOIN customers c ON c.id = i.customer_id
              WHERE i.id = ?'
@@ -99,7 +99,7 @@ try {
         if ($result['success']) {
             // Log reminder send via audit_log (invoice has email_sent_at for general email tracking)
             auditLog($pdo, (int)$auth['user_id'], $auth['username'],
-                $invoice['created_store_context'] ?? null,
+                $invoice['store_code'] ?? null,
                 'reminder_sent', 'invoice', $invoiceId,
                 null, ['to_email' => $invoice['customer_email']]);
         }

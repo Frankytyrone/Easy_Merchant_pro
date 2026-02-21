@@ -126,45 +126,56 @@ function requireAuth(): array
 }
 
 /**
+ * Load all settings from the key-value settings table.
+ * Returns an associative array of key => value.
+ */
+function getSettings(PDO $pdo): array {
+    $rows = $pdo->query('SELECT `key`, value FROM settings')->fetchAll();
+    $out = [];
+    foreach ($rows as $r) { $out[$r['key']] = $r['value']; }
+    return $out;
+}
+
+/**
  * Write an entry to the audit_log table.
  *
  * @param PDO         $pdo
  * @param int|null    $userId
  * @param string      $userName
- * @param mixed       $storeContext  store code (VARCHAR) or store_id (int); stored in store_context
- * @param string      $action        e.g. 'create', 'update', 'delete'
- * @param string      $entityType    e.g. 'invoice', 'customer'
- * @param int|null    $entityId
- * @param mixed       $oldValues     array|null
- * @param mixed       $newValues     array|null
+ * @param mixed       $storeCode   store code string (VARCHAR)
+ * @param string      $action      e.g. 'create', 'update', 'delete'
+ * @param string      $tableName   e.g. 'invoice', 'customer'
+ * @param int|null    $recordId
+ * @param mixed       $oldValue    array|null
+ * @param mixed       $newValue    array|null
  */
 function auditLog(
     PDO $pdo,
     ?int $userId,
     string $userName,
-    $storeContext,
+    $storeCode,
     string $action,
-    string $entityType,
-    ?int $entityId,
-    $oldValues,
-    $newValues
+    string $tableName,
+    ?int $recordId,
+    $oldValue,
+    $newValue
 ): void {
     try {
         $stmt = $pdo->prepare(
             'INSERT INTO audit_log
-             (user_id, user_name, store_context, action, entity_type, entity_id,
-              old_values, new_values, ip_address, created_at)
+             (user_id, username, store_code, action, table_name, record_id,
+              old_value, new_value, ip_address, created_at)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())'
         );
         $stmt->execute([
             $userId,
             $userName,
-            $storeContext,   // stored in store_context column
+            $storeCode,
             $action,
-            $entityType,
-            $entityId,
-            $oldValues !== null ? json_encode($oldValues) : null,
-            $newValues !== null ? json_encode($newValues) : null,
+            $tableName,
+            $recordId,
+            $oldValue !== null ? json_encode($oldValue) : null,
+            $newValue !== null ? json_encode($newValue) : null,
             $_SERVER['REMOTE_ADDR'] ?? null,
         ]);
     } catch (PDOException $e) {
