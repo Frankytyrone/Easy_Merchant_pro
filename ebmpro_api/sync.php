@@ -39,21 +39,24 @@ function applySyncAction(PDO $pdo, array $auth, array $item): array
 // invoice_sequences: store_code PK, next_invoice_num, next_quote_num
 function syncCreateInvoice(PDO $pdo, array $auth, array $b): array
 {
-    if (empty($b['store_id']) || empty($b['customer_id']) || empty($b['invoice_date'])
+    if ((empty($b['store_id']) && empty($b['store_code'])) || empty($b['customer_id']) || empty($b['invoice_date'])
         || empty($b['items'])) {
         return ['ok' => false, 'error' => 'Missing required invoice fields'];
     }
 
-    $storeId = (int)$b['store_id'];
-    $type    = in_array($b['type'] ?? $b['invoice_type'] ?? '', ['invoice','quote','credit_note'], true)
-               ? ($b['type'] ?? $b['invoice_type']) : 'invoice';
+    // Accept store_code directly or resolve from numeric store_id
+    if (!empty($b['store_code'])) {
+        $storeCode = strtoupper(trim($b['store_code']));
+    } else {
+        $storeId = (int)$b['store_id'];
+        $sStmt = $pdo->prepare('SELECT code FROM stores WHERE id = ? LIMIT 1');
+        $sStmt->execute([$storeId]);
+        $storeRow  = $sStmt->fetch();
+        $storeCode = $storeRow ? $storeRow['code'] : 'store';
+    }
 
-    // Resolve store code
-    $sStmt = $pdo->prepare('SELECT code FROM stores WHERE id = ? LIMIT 1');
-    $sStmt->execute([$storeId]);
-    $storeRow  = $sStmt->fetch();
-    $storeCode = $storeRow ? $storeRow['code'] : 'store';
-
+    $type = in_array($b['type'] ?? $b['invoice_type'] ?? '', ['invoice','quote','credit_note'], true)
+            ? ($b['type'] ?? $b['invoice_type']) : 'invoice';
     $seqCol    = ($type === 'quote') ? 'next_quote_num' : 'next_invoice_num';
     $prefixCol = ($type === 'quote') ? 'quote_prefix'   : 'invoice_prefix';
 

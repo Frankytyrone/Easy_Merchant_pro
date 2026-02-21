@@ -39,7 +39,7 @@ const App = (() => {
 
   /* ── Store management ─────────────────────────────────────── */
   function getCurrentStore() {
-    return localStorage.getItem('ebmpro_store') || 'falcarragh';
+    return localStorage.getItem('ebmpro_store') || 'FAL';
   }
 
   function switchStore(storeCode) {
@@ -132,8 +132,8 @@ const App = (() => {
     const params = new URLSearchParams();
     if (filters.status && filters.status !== 'all') params.set('status', filters.status);
     if (filters.q)    params.set('q', filters.q);
-    if (storeFilter && storeFilter.value) params.set('store_id', storeFilter.value);
-    else params.set('store_id', getCurrentStore());
+    if (storeFilter && storeFilter.value) params.set('store_code', storeFilter.value);
+    else params.set('store_code', getCurrentStore());
 
     try {
       const resp = await fetch(`/ebmpro_api/invoices.php?${params}`, { headers: Auth.getAuthHeaders() });
@@ -181,7 +181,7 @@ const App = (() => {
     const dateFrom = document.getElementById('reportDateFrom');
     const dateTo   = document.getElementById('reportDateTo');
 
-    const params = new URLSearchParams({ store_id: getCurrentStore() });
+    const params = new URLSearchParams({ store_code: getCurrentStore() });
     if (dateFrom && dateFrom.value) params.set('date_from', dateFrom.value);
     if (dateTo   && dateTo.value)   params.set('date_to',   dateTo.value);
 

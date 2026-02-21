@@ -80,7 +80,7 @@ const PDF = (() => {
       [`${docLabel} No:`, docNumber],
       ['Date:',           fmtDate(invoice.invoice_date)],
       ...(isQuote ? [] : [['Due Date:', fmtDate(invoice.due_date)]]),
-      ['Store:',          invoice.store_id || ''],
+      ['Store:',          invoice.store_code || ''],
       ['Status:',         (invoice.status || 'draft').toUpperCase()]
     ];
 

@@ -234,8 +234,10 @@ try {
         }
 
         // Create invoice / quote
-        $required = ['store_id', 'customer_id', 'invoice_date', 'items'];
-        foreach ($required as $f) {
+        if (empty($body['store_id']) && empty($body['store_code'])) {
+            jsonResponse(['success' => false, 'error' => "Field 'store_code' is required"], 422);
+        }
+        foreach (['customer_id', 'invoice_date', 'items'] as $f) {
             if (empty($body[$f])) {
                 jsonResponse(['success' => false, 'error' => "Field '$f' is required"], 422);
             }
@@ -246,8 +248,13 @@ try {
 
         $type      = in_array($body['type'] ?? $body['invoice_type'] ?? '', ['invoice','quote','credit_note'], true)
                        ? ($body['type'] ?? $body['invoice_type']) : 'invoice';
-        $storeId   = (int)$body['store_id'];
-        $sc        = storeCode($pdo, $storeId);
+        // Accept store_code directly or resolve from numeric store_id
+        if (!empty($body['store_code'])) {
+            $sc = strtoupper(trim($body['store_code']));
+        } else {
+            $storeId = (int)$body['store_id'];
+            $sc      = storeCode($pdo, $storeId);
+        }
         $invNumber = nextInvoiceNumber($pdo, $sc, $type);
 
         $stmt = $pdo->prepare(

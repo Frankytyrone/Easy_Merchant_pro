@@ -30,7 +30,7 @@ const DB = (() => {
         /* invoices */
         if (!db.objectStoreNames.contains('invoices')) {
           const inv = db.createObjectStore('invoices', { keyPath: 'id' });
-          inv.createIndex('store_id',     'store_id',     { unique: false });
+          inv.createIndex('store_code',    'store_code',     { unique: false });
           inv.createIndex('status',       'status',       { unique: false });
           inv.createIndex('customer_id',  'customer_id',  { unique: false });
           inv.createIndex('invoice_date', 'invoice_date', { unique: false });

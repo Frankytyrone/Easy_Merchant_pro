@@ -11,7 +11,7 @@ const Invoice = (() => {
     const today = todayStr();
     return {
       id:               null,
-      store_id:         App ? App.getCurrentStore() : 'falcarragh',
+      store_code:        App ? App.getCurrentStore() : 'FAL',
       invoice_type:     'invoice',  // 'invoice' | 'quote'
       customer_id:      null,
       customer_name:    '',
@@ -197,8 +197,8 @@ const Invoice = (() => {
 
   /* ── saveInvoice ──────────────────────────────────────────── */
   async function saveInvoice() {
-    // Sync store_id from app state
-    currentInvoice.store_id = App.getCurrentStore();
+    // Sync store_code from app state
+    currentInvoice.store_code = App.getCurrentStore();
     const method  = currentInvoice.id ? 'PUT' : 'POST';
     const url     = currentInvoice.id
       ? `/ebmpro_api/invoices.php?id=${encodeURIComponent(currentInvoice.id)}`
