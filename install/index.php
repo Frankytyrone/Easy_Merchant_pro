@@ -553,9 +553,10 @@ function stepNav(int $current): string
     return $html;
 }
 
-function val(string $key, string $default = ''): string
+function val(string $key, $default = ''): string
 {
-    return htmlspecialchars($_SESSION['install'][$key] ?? $default, ENT_QUOTES);
+    $v = $_SESSION['install'][$key] ?? $default;
+    return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8');
 }
 
 // ─── Server checks ────────────────────────────────────────────────────────────
