@@ -37,33 +37,49 @@ try {
             $q   = trim($_GET['q']);
             $res = [];
 
-            // Try MATCH AGAINST first (FULLTEXT index is on description, product_code)
-            try {
+            // 1. Exact barcode match (USB/Bluetooth scanner sends exact barcode)
+            if (preg_match('/^\d{6,20}$/', $q)) {
                 $stmt = $pdo->prepare(
-                    'SELECT *, MATCH(description, product_code) AGAINST(? IN BOOLEAN MODE) AS score
-                     FROM products
-                     WHERE active = 1
-                       AND MATCH(description, product_code) AGAINST(? IN BOOLEAN MODE)
-                     ORDER BY score DESC
-                     LIMIT 20'
+                    'SELECT * FROM products WHERE active = 1 AND barcode = ? LIMIT 5'
                 );
-                $stmt->execute([$q, $q]);
+                $stmt->execute([$q]);
                 $res = $stmt->fetchAll();
-            } catch (PDOException $e) {
-                $res = [];
             }
 
-            // Fallback to LIKE if full-text returned nothing
+            // 2. Full-text search on description + product_code with partial-word support
+            if (empty($res)) {
+                try {
+                    // Append * for prefix/partial matching in BOOLEAN MODE
+                    $ftQuery = implode(' ', array_map(
+                        fn($w) => strlen($w) >= 2 ? $w . '*' : $w,
+                        array_filter(explode(' ', preg_replace('/[^\w\s]/', ' ', $q)))
+                    ));
+                    $stmt = $pdo->prepare(
+                        'SELECT *, MATCH(description, product_code) AGAINST(? IN BOOLEAN MODE) AS score
+                         FROM products
+                         WHERE active = 1
+                           AND MATCH(description, product_code) AGAINST(? IN BOOLEAN MODE)
+                         ORDER BY score DESC
+                         LIMIT 20'
+                    );
+                    $stmt->execute([$ftQuery, $ftQuery]);
+                    $res = $stmt->fetchAll();
+                } catch (PDOException $e) {
+                    $res = [];
+                }
+            }
+
+            // 3. Fallback: LIKE search on description, product_code and barcode
             if (empty($res)) {
                 $like = '%' . $q . '%';
                 $stmt = $pdo->prepare(
                     'SELECT * FROM products
                      WHERE active = 1
-                       AND (description LIKE ? OR product_code LIKE ?)
+                       AND (description LIKE ? OR product_code LIKE ? OR barcode LIKE ?)
                      ORDER BY description ASC
                      LIMIT 20'
                 );
-                $stmt->execute([$like, $like]);
+                $stmt->execute([$like, $like, $like]);
                 $res = $stmt->fetchAll();
             }
 

@@ -29,6 +29,26 @@ const Sync = (() => {
       el.className = 'offline';
       el.textContent = '🔴 Offline';
     }
+
+    // Show/hide offline banner
+    let banner = document.getElementById('offlineBanner');
+    if (!online) {
+      if (!banner) {
+        banner = document.createElement('div');
+        banner.id = 'offlineBanner';
+        banner.setAttribute('role', 'alert');
+        banner.style.cssText = `
+          position:fixed;top:0;left:0;right:0;z-index:8000;
+          background:#b94a00;color:#fff;text-align:center;
+          padding:.4rem 1rem;font-weight:700;font-size:.92rem;
+          letter-spacing:.04em;
+        `;
+        banner.textContent = '⚠️ OFFLINE MODE — changes are saved locally and will sync when reconnected';
+        document.body.prepend(banner);
+      }
+    } else {
+      if (banner) banner.remove();
+    }
   }
 
   /* ── Flush offline queue ──────────────────────────────────── */
@@ -59,7 +79,11 @@ const Sync = (() => {
         for (const id of processed) {
           await DB.markProcessed(id);
         }
-        console.info(`[Sync] Flushed ${processed.length} queued item(s).`);
+        const count = processed.length;
+        console.info(`[Sync] Flushed ${count} queued item(s).`);
+        if (count > 0 && typeof App !== 'undefined' && App.showToast) {
+          App.showToast(`✅ ${count} item${count !== 1 ? 's' : ''} synced successfully`, 'success');
+        }
       }
     } catch (err) {
       console.warn('[Sync] Could not flush offline queue:', err);

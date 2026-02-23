@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#1a3a2a">
+  <title>Admin Dashboard — EBM Pro</title>
+  <link rel="stylesheet" href="/ebmpro/css/styles.css">
+  <style>
+    body { background: #f0f4f0; }
+    .admin-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.2rem; padding: 1.2rem; }
+    .stat-card { background: #fff; border-radius: 10px; padding: 1.2rem; box-shadow: 0 2px 8px rgba(0,0,0,.08); }
+    .stat-card h3 { margin: 0 0 .7rem; font-size: 1rem; color: #1a3a2a; display: flex; align-items: center; gap:.5rem; }
+    .stat-big { font-size: 2rem; font-weight: 700; color: #1a3a2a; }
+    .badge { display:inline-block; padding:.2em .6em; border-radius:12px; font-size:.78rem; font-weight:600; }
+    .badge-green { background:#d4edda; color:#155724; }
+    .badge-yellow { background:#fff3cd; color:#856404; }
+    .badge-red { background:#f8d7da; color:#721c24; }
+    .badge-blue { background:#d1ecf1; color:#0c5460; }
+    .admin-table { width:100%; border-collapse:collapse; font-size:.88rem; }
+    .admin-table th { background:#1a3a2a; color:#fff; padding:.5rem .7rem; text-align:left; }
+    .admin-table td { padding:.45rem .7rem; border-bottom:1px solid #e5e5e5; vertical-align:middle; }
+    .admin-table tr:hover td { background:#f7fff7; }
+    .btn-xs { padding:.2rem .6rem; font-size:.78rem; border-radius:5px; cursor:pointer; border:none; }
+    .btn-danger-xs { background:#dc3545; color:#fff; }
+    .btn-success-xs { background:#28a745; color:#fff; }
+    .btn-warning-xs { background:#ffc107; color:#212529; }
+    .btn-primary-xs { background:#1a3a2a; color:#fff; }
+    .section-title { font-size:1.1rem; font-weight:700; color:#1a3a2a; margin:1.2rem 1.2rem .4rem; }
+    .status-dot { width:10px; height:10px; border-radius:50%; display:inline-block; margin-right:5px; }
+    .dot-green { background:#28a745; }
+    .dot-red { background:#dc3545; }
+    .modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:1000; align-items:center; justify-content:center; }
+    .modal-overlay.open { display:flex; }
+    .modal-box { background:#fff; border-radius:12px; padding:1.5rem; width:min(400px,95vw); max-height:90vh; overflow-y:auto; }
+    .form-group-sm { margin-bottom:.8rem; }
+    .form-group-sm label { display:block; font-size:.85rem; font-weight:600; margin-bottom:.3rem; }
+    .form-group-sm input, .form-group-sm select { width:100%; padding:.4rem .7rem; border:1px solid #ccc; border-radius:6px; font-size:.9rem; }
+    #toastContainer { position:fixed; top:1rem; right:1rem; z-index:9999; display:flex; flex-direction:column; gap:.4rem; }
+    .toast { padding:.6rem 1rem; border-radius:8px; color:#fff; font-size:.9rem; box-shadow:0 2px 8px rgba(0,0,0,.2); animation: fadeIn .2s; }
+    .toast-success { background:#28a745; }
+    .toast-error { background:#dc3545; }
+    @keyframes fadeIn { from { opacity:0; transform:translateY(-6px); } to { opacity:1; transform:none; } }
+    @media(max-width:600px){ .admin-grid { grid-template-columns:1fr; } }
+  </style>
+</head>
+<body>
+
+<div id="toastContainer"></div>
+
+<!-- Header -->
+<header style="background:#1a3a2a;color:#fff;padding:.8rem 1.2rem;display:flex;align-items:center;justify-content:space-between;">
+  <span style="font-weight:700;font-size:1.1rem;">🛡️ EBM Pro — Admin Dashboard</span>
+  <div style="display:flex;gap:.7rem;align-items:center;">
+    <span id="clockDisplay" style="font-size:.85rem;opacity:.8;"></span>
+    <a href="/ebmpro/" style="color:#fff;font-size:.85rem;text-decoration:none;background:rgba(255,255,255,.15);padding:.3rem .8rem;border-radius:6px;">← Back to App</a>
+    <button onclick="logout()" style="background:#c0392b;color:#fff;border:none;padding:.3rem .8rem;border-radius:6px;cursor:pointer;font-size:.85rem;">Logout</button>
+  </div>
+</header>
+
+<!-- Nav tabs -->
+<div style="background:#fff;border-bottom:2px solid #1a3a2a;display:flex;gap:0;padding:0 1rem;">
+  <button class="tab-btn active" onclick="showTab('tabDashboard')" id="btnTabDashboard">📊 Dashboard</button>
+  <button class="tab-btn" onclick="showTab('tabOperators')" id="btnTabOperators">👥 Operators</button>
+  <button class="tab-btn" onclick="showTab('tabAudit')" id="btnTabAudit">📋 Audit Log</button>
+  <button class="tab-btn" onclick="showTab('tabBackups')" id="btnTabBackups">💾 Backups</button>
+  <button class="tab-btn" onclick="showTab('tabImport')" id="btnTabImport">📥 Import</button>
+</div>
+<style>
+.tab-btn { padding:.6rem 1.1rem; border:none; background:transparent; cursor:pointer; font-size:.9rem; font-weight:600; color:#555; border-bottom:3px solid transparent; transition:color .15s,border-color .15s; }
+.tab-btn.active { color:#1a3a2a; border-bottom-color:#1a3a2a; }
+.tab-btn:hover { color:#1a3a2a; }
+</style>
+
+<!-- ═══ TAB: Dashboard ═══ -->
+<div id="tabDashboard" class="tab-panel">
+  <div class="admin-grid" id="dashGrid">
+    <!-- Populated by JS -->
+  </div>
+
+  <div class="section-title">🟢 Who is Online (last 5 mins)</div>
+  <div style="padding:0 1.2rem;">
+    <table class="admin-table" id="onlineTable">
+      <thead><tr><th>User</th><th>Store</th><th>Last Seen</th></tr></thead>
+      <tbody id="onlineTbody"><tr><td colspan="3" class="text-center">Loading…</td></tr></tbody>
+    </table>
+  </div>
+
+  <div class="section-title">📋 Recent Activity (last 20 actions)</div>
+  <div style="padding:0 1.2rem 1.2rem;">
+    <table class="admin-table" id="recentAuditTable">
+      <thead><tr><th>Time</th><th>User</th><th>Action</th><th>Table</th><th>Record</th><th>Store</th></tr></thead>
+      <tbody id="recentAuditTbody"><tr><td colspan="6" class="text-center">Loading…</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ═══ TAB: Operators ═══ -->
+<div id="tabOperators" class="tab-panel" style="display:none;">
+  <div style="padding:1.2rem;display:flex;justify-content:space-between;align-items:center;">
+    <h3 style="margin:0;">Operator Management</h3>
+    <button class="btn btn-primary" onclick="openOperatorModal()">➕ Add Operator</button>
+  </div>
+  <div style="padding:0 1.2rem 1.2rem;">
+    <table class="admin-table" id="operatorsTable">
+      <thead><tr><th>Username</th><th>Role</th><th>Store</th><th>Status</th><th>Created</th><th>Actions</th></tr></thead>
+      <tbody id="operatorsTbody"><tr><td colspan="6" class="text-center">Loading…</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ═══ TAB: Audit Log ═══ -->
+<div id="tabAudit" class="tab-panel" style="display:none;">
+  <div style="padding:1.2rem;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.5rem;">
+    <h3 style="margin:0;">Audit Log</h3>
+    <div style="display:flex;gap:.5rem;">
+      <input type="number" id="auditLimit" value="50" min="10" max="500" style="width:80px;padding:.3rem .5rem;border:1px solid #ccc;border-radius:5px;" placeholder="Limit">
+      <button class="btn btn-primary" onclick="loadAudit()">🔄 Refresh</button>
+    </div>
+  </div>
+  <div style="padding:0 1.2rem 1.2rem;overflow-x:auto;">
+    <table class="admin-table" id="auditTable">
+      <thead><tr><th>Time</th><th>User</th><th>Store</th><th>Action</th><th>Table</th><th>Record ID</th><th>IP</th></tr></thead>
+      <tbody id="auditTbody"><tr><td colspan="7" class="text-center">Loading…</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ═══ TAB: Backups ═══ -->
+<div id="tabBackups" class="tab-panel" style="display:none;">
+  <div style="padding:1.2rem;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.5rem;">
+    <h3 style="margin:0;">Backup Management</h3>
+    <div style="display:flex;gap:.5rem;">
+      <button class="btn btn-primary" onclick="runBackup()">💾 Create Backup Now</button>
+      <a id="btnDownloadLatest" href="/ebmpro_api/backup.php" class="btn btn-accent">⬇️ Download Full Backup</a>
+    </div>
+  </div>
+  <div style="padding:0 1.2rem 1.2rem;">
+    <table class="admin-table" id="backupsTable">
+      <thead><tr><th>Filename</th><th>Size</th><th>Created</th><th>Download</th></tr></thead>
+      <tbody id="backupsTbody"><tr><td colspan="4" class="text-center">Loading…</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ═══ TAB: Import ═══ -->
+<div id="tabImport" class="tab-panel" style="display:none;">
+  <div style="padding:1.2rem;max-width:650px;">
+    <h3>📥 Data Import</h3>
+    <p style="color:#555;font-size:.9rem;">Import from your Easy Invoicing Access database export. Accept XML or CSV. Processes in chunks of 500 records.</p>
+
+    <!-- Products -->
+    <div class="stat-card" style="margin-bottom:1rem;">
+      <h3>📦 Products Import</h3>
+      <p style="font-size:.85rem;color:#555;margin:.3rem 0 .8rem;">From <code>tbl_products</code> — columns: ProductID, ProductsCod, order_description, etc.</p>
+      <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;">
+        <input type="file" id="productsFile" accept=".xml,.csv" style="flex:1;min-width:200px;">
+        <select id="productsStore" style="padding:.35rem .5rem;border:1px solid #ccc;border-radius:5px;">
+          <option value="">All Stores</option>
+          <option value="1">Falcarragh (FAL)</option>
+          <option value="2">Gweedore (GWE)</option>
+        </select>
+        <button class="btn btn-primary" onclick="startImport('products')">Import</button>
+      </div>
+      <div id="productsProgress" style="display:none;margin-top:.8rem;">
+        <div style="background:#e0e0e0;border-radius:6px;height:14px;overflow:hidden;">
+          <div id="productsBar" style="background:#1a3a2a;height:100%;width:0%;transition:width .3s;border-radius:6px;"></div>
+        </div>
+        <p id="productsMsg" style="font-size:.82rem;margin:.3rem 0 0;color:#333;"></p>
+      </div>
+    </div>
+
+    <!-- Customers -->
+    <div class="stat-card" style="margin-bottom:1rem;">
+      <h3>👤 Customers Import</h3>
+      <p style="font-size:.85rem;color:#555;margin:.3rem 0 .8rem;">From <code>tbl_clients</code> — columns: client_id, client_name, alternative, address, etc.</p>
+      <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;">
+        <input type="file" id="customersFile" accept=".xml,.csv" style="flex:1;min-width:200px;">
+        <button class="btn btn-primary" onclick="startImport('customers')">Import</button>
+      </div>
+      <div id="customersProgress" style="display:none;margin-top:.8rem;">
+        <div style="background:#e0e0e0;border-radius:6px;height:14px;overflow:hidden;">
+          <div id="customersBar" style="background:#1a3a2a;height:100%;width:0%;transition:width .3s;border-radius:6px;"></div>
+        </div>
+        <p id="customersMsg" style="font-size:.82rem;margin:.3rem 0 0;color:#333;"></p>
+      </div>
+    </div>
+
+    <!-- Invoices -->
+    <div class="stat-card" style="margin-bottom:1rem;">
+      <h3>🧾 Invoices Import</h3>
+      <p style="font-size:.85rem;color:#555;margin:.3rem 0 .8rem;">From <code>tbl_invoice</code> — columns: inv_id, inv_nu, ClientID, inv_date, etc.</p>
+      <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;">
+        <input type="file" id="invoicesFile" accept=".xml,.csv" style="flex:1;min-width:200px;">
+        <select id="invoicesStore" style="padding:.35rem .5rem;border:1px solid #ccc;border-radius:5px;">
+          <option value="FAL">Falcarragh (FAL)</option>
+          <option value="GWE">Gweedore (GWE)</option>
+        </select>
+        <button class="btn btn-primary" onclick="startImport('invoices')">Import</button>
+      </div>
+      <div id="invoicesProgress" style="display:none;margin-top:.8rem;">
+        <div style="background:#e0e0e0;border-radius:6px;height:14px;overflow:hidden;">
+          <div id="invoicesBar" style="background:#1a3a2a;height:100%;width:0%;transition:width .3s;border-radius:6px;"></div>
+        </div>
+        <p id="invoicesMsg" style="font-size:.82rem;margin:.3rem 0 0;color:#333;"></p>
+      </div>
+    </div>
+
+    <!-- Payments -->
+    <div class="stat-card">
+      <h3>💳 Payments Import</h3>
+      <p style="font-size:.85rem;color:#555;margin:.3rem 0 .8rem;">From <code>tbl_payments</code> — columns: pay_id, pay_link, pay_date, pay_amount, pay_details.</p>
+      <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;">
+        <input type="file" id="paymentsFile" accept=".xml,.csv" style="flex:1;min-width:200px;">
+        <button class="btn btn-primary" onclick="startImport('payments')">Import</button>
+      </div>
+      <div id="paymentsProgress" style="display:none;margin-top:.8rem;">
+        <div style="background:#e0e0e0;border-radius:6px;height:14px;overflow:hidden;">
+          <div id="paymentsBar" style="background:#1a3a2a;height:100%;width:0%;transition:width .3s;border-radius:6px;"></div>
+        </div>
+        <p id="paymentsMsg" style="font-size:.82rem;margin:.3rem 0 0;color:#333;"></p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Operator Modal -->
+<div class="modal-overlay" id="operatorModal">
+  <div class="modal-box">
+    <h3 id="operatorModalTitle" style="margin:0 0 1rem;">Add Operator</h3>
+    <input type="hidden" id="opId">
+    <div class="form-group-sm">
+      <label>Username</label>
+      <input type="text" id="opUsername" autocomplete="off">
+    </div>
+    <div class="form-group-sm">
+      <label>Role</label>
+      <select id="opRole">
+        <option value="counter">Counter (standard)</option>
+        <option value="manager">Manager</option>
+        <option value="admin">Admin</option>
+      </select>
+    </div>
+    <div class="form-group-sm">
+      <label>Store</label>
+      <select id="opStore">
+        <option value="">All Stores</option>
+        <option value="1">Falcarragh</option>
+        <option value="2">Gweedore</option>
+      </select>
+    </div>
+    <div class="form-group-sm">
+      <label id="opPwLabel">Password</label>
+      <input type="password" id="opPassword" autocomplete="new-password" placeholder="Leave blank to keep existing">
+    </div>
+    <div style="display:flex;gap:.5rem;margin-top:1rem;justify-content:flex-end;">
+      <button class="btn btn-light" onclick="closeModal('operatorModal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveOperator()">Save</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = '/ebmpro_api';
+let _token = null;
+
+function getToken() {
+  if (!_token) _token = localStorage.getItem('ebm_token');
+  return _token;
+}
+
+async function apiFetch(url, opts = {}) {
+  const headers = { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getToken(), ...(opts.headers || {}) };
+  const res = await fetch(url, { ...opts, headers });
+  if (res.status === 401) { logout(); return null; }
+  return res.json().catch(() => null);
+}
+
+function toast(msg, type = 'success') {
+  const t = document.createElement('div');
+  t.className = 'toast toast-' + type;
+  t.textContent = msg;
+  document.getElementById('toastContainer').appendChild(t);
+  setTimeout(() => t.remove(), 4000);
+}
+
+function logout() {
+  localStorage.removeItem('ebm_token');
+  window.location.href = '/ebmpro/';
+}
+
+function showTab(id) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.style.display = 'none');
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById(id).style.display = '';
+  document.getElementById('btnTab' + id.replace('tab','')).classList.add('active');
+  // Lazy-load tab content
+  if (id === 'tabDashboard') loadDashboard();
+  if (id === 'tabOperators') loadOperators();
+  if (id === 'tabAudit') loadAudit();
+  if (id === 'tabBackups') loadBackups();
+}
+
+// ── Dashboard ────────────────────────────────────────────────────────────────
+async function loadDashboard() {
+  const data = await apiFetch(API + '/admin.php?action=dashboard');
+  if (!data || !data.success) return;
+
+  const sales = data.today_sales || [];
+  let falSales = { total_sales: 0, invoice_count: 0 };
+  let gweSales = { total_sales: 0, invoice_count: 0 };
+  sales.forEach(s => {
+    if (s.store_code === 'FAL') falSales = s;
+    if (s.store_code === 'GWE') gweSales = s;
+  });
+
+  const h = data.health || {};
+  document.getElementById('dashGrid').innerHTML = `
+    <div class="stat-card">
+      <h3>🏪 Falcarragh — Today</h3>
+      <div class="stat-big">€${parseFloat(falSales.total_sales||0).toFixed(2)}</div>
+      <div style="color:#666;font-size:.85rem;">${falSales.invoice_count||0} invoices</div>
+    </div>
+    <div class="stat-card">
+      <h3>🏪 Gweedore — Today</h3>
+      <div class="stat-big">€${parseFloat(gweSales.total_sales||0).toFixed(2)}</div>
+      <div style="color:#666;font-size:.85rem;">${gweSales.invoice_count||0} invoices</div>
+    </div>
+    <div class="stat-card">
+      <h3>🗄️ Database Size</h3>
+      <div class="stat-big">${h.db_size_mb||'?'} MB</div>
+    </div>
+    <div class="stat-card">
+      <h3>💾 Last Backup</h3>
+      <div style="font-size:1rem;font-weight:600;">${h.last_backup || 'Never'}</div>
+      <div style="margin-top:.5rem;"><span class="badge ${h.last_backup ? 'badge-green' : 'badge-red'}">${h.last_backup ? 'OK' : 'No backups found'}</span></div>
+    </div>
+    <div class="stat-card">
+      <h3>🔄 Sync Queue</h3>
+      <div class="stat-big">${h.sync_pending||0}</div>
+      <div style="color:#666;font-size:.85rem;">pending items</div>
+    </div>
+  `;
+
+  // Online users
+  const onlineTbody = document.getElementById('onlineTbody');
+  const online = data.online || [];
+  if (online.length === 0) {
+    onlineTbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:#888;">No active sessions</td></tr>';
+  } else {
+    onlineTbody.innerHTML = online.map(u => `
+      <tr>
+        <td><span class="status-dot dot-green"></span>${esc(u.username)}</td>
+        <td>${esc(u.store_code||'')}</td>
+        <td>${esc(u.last_seen||'')}</td>
+      </tr>
+    `).join('');
+  }
+
+  // Recent audit
+  const auditData = await apiFetch(API + '/admin.php?action=audit&limit=20');
+  renderAuditRows('recentAuditTbody', (auditData?.data || []), 6);
+}
+
+// ── Audit Log ────────────────────────────────────────────────────────────────
+async function loadAudit() {
+  const limit = parseInt(document.getElementById('auditLimit').value) || 50;
+  const data  = await apiFetch(API + '/admin.php?action=audit&limit=' + limit);
+  renderAuditRows('auditTbody', data?.data || [], 7);
+}
+
+function renderAuditRows(tbodyId, rows, cols) {
+  const tbody = document.getElementById(tbodyId);
+  if (!rows.length) {
+    tbody.innerHTML = `<tr><td colspan="${cols}" style="text-align:center;color:#888;">No audit entries</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = rows.map(r => {
+    const colList = cols === 6
+      ? `<td>${esc(r.created_at||'')}</td><td>${esc(r.username||'')}</td><td>${esc(r.action||'')}</td><td>${esc(r.table_name||'')}</td><td>${r.record_id||''}</td><td>${esc(r.store_code||'')}</td>`
+      : `<td>${esc(r.created_at||'')}</td><td>${esc(r.username||'')}</td><td>${esc(r.store_code||'')}</td><td>${esc(r.action||'')}</td><td>${esc(r.table_name||'')}</td><td>${r.record_id||''}</td><td>${esc(r.ip_address||'')}</td>`;
+    return `<tr>${colList}</tr>`;
+  }).join('');
+}
+
+// ── Operators ────────────────────────────────────────────────────────────────
+async function loadOperators() {
+  const data = await apiFetch(API + '/admin.php?action=operators');
+  const tbody = document.getElementById('operatorsTbody');
+  const ops   = data?.data || [];
+  if (!ops.length) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#888;">No operators found</td></tr>';
+    return;
+  }
+  tbody.innerHTML = ops.map(o => `
+    <tr>
+      <td><strong>${esc(o.username)}</strong></td>
+      <td><span class="badge badge-blue">${esc(o.role)}</span></td>
+      <td>${o.store_id ? (o.store_id == 1 ? 'Falcarragh' : 'Gweedore') : 'All'}</td>
+      <td><span class="badge ${o.active ? 'badge-green' : 'badge-red'}">${o.active ? 'Active' : 'Locked'}</span></td>
+      <td>${esc((o.created_at||'').slice(0,10))}</td>
+      <td style="display:flex;gap:.3rem;flex-wrap:wrap;">
+        <button class="btn-xs btn-primary-xs" onclick="openOperatorModal(${JSON.stringify(o)})">Edit</button>
+        <button class="btn-xs ${o.active ? 'btn-warning-xs' : 'btn-success-xs'}" onclick="toggleLock(${o.id},${o.active})">${o.active ? 'Lock' : 'Unlock'}</button>
+        <button class="btn-xs btn-danger-xs" onclick="resetPasswordPrompt(${o.id})">Reset PW</button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function openOperatorModal(op = null) {
+  document.getElementById('opId').value       = op ? op.id : '';
+  document.getElementById('opUsername').value = op ? op.username : '';
+  document.getElementById('opRole').value     = op ? op.role : 'counter';
+  document.getElementById('opStore').value    = op ? (op.store_id || '') : '';
+  document.getElementById('opPassword').value = '';
+  document.getElementById('operatorModalTitle').textContent = op ? 'Edit Operator' : 'Add Operator';
+  document.getElementById('opPwLabel').textContent = op ? 'New Password (leave blank to keep)' : 'Password *';
+  document.getElementById('operatorModal').classList.add('open');
+}
+
+async function saveOperator() {
+  const id       = document.getElementById('opId').value;
+  const username = document.getElementById('opUsername').value.trim();
+  const role     = document.getElementById('opRole').value;
+  const storeId  = document.getElementById('opStore').value;
+  const password = document.getElementById('opPassword').value;
+
+  const body = { username, role, store_id: storeId ? parseInt(storeId) : null };
+  if (id) body.id = parseInt(id);
+  if (password) body.password = password;
+
+  const res = await apiFetch(API + '/admin.php?action=operator', { method: 'POST', body: JSON.stringify(body) });
+  if (res?.success) {
+    toast(res.message || 'Saved');
+    closeModal('operatorModal');
+    loadOperators();
+  } else {
+    toast(res?.error || 'Error saving operator', 'error');
+  }
+}
+
+async function toggleLock(id, currentActive) {
+  const res = await apiFetch(API + '/admin.php?action=lock', {
+    method: 'POST',
+    body: JSON.stringify({ id, active: currentActive ? 0 : 1 }),
+  });
+  if (res?.success) { toast(res.message); loadOperators(); }
+  else toast(res?.error || 'Error', 'error');
+}
+
+async function resetPasswordPrompt(id) {
+  const pw = prompt('Enter new password for operator (min 8 characters):');
+  if (!pw || pw.length < 8) { alert('Password must be at least 8 characters.'); return; }
+  const res = await apiFetch(API + '/admin.php?action=reset_password', {
+    method: 'POST',
+    body: JSON.stringify({ id, password: pw }),
+  });
+  if (res?.success) toast('Password reset successfully');
+  else toast(res?.error || 'Error', 'error');
+}
+
+// ── Backups ──────────────────────────────────────────────────────────────────
+async function loadBackups() {
+  const data  = await apiFetch(API + '/admin.php?action=backups');
+  const tbody = document.getElementById('backupsTbody');
+  const list  = data?.data || [];
+  if (!list.length) {
+    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#888;">No saved backups found. Click "Create Backup Now" to generate one.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = list.map(b => `
+    <tr>
+      <td>${esc(b.filename)}</td>
+      <td>${b.size_mb} MB</td>
+      <td>${esc(b.created)}</td>
+      <td><a href="${API}/admin.php?action=download_backup&filename=${encodeURIComponent(b.filename)}" class="btn-xs btn-primary-xs" style="text-decoration:none;">⬇️ Download</a></td>
+    </tr>
+  `).join('');
+}
+
+async function runBackup() {
+  const btn = event.target;
+  btn.disabled = true;
+  btn.textContent = 'Creating…';
+  const res = await apiFetch(API + '/admin.php?action=run_backup', { method: 'POST', body: '{}' });
+  btn.disabled = false;
+  btn.textContent = '💾 Create Backup Now';
+  if (res?.success) { toast('Backup created: ' + res.filename); loadBackups(); }
+  else toast(res?.error || 'Backup failed', 'error');
+}
+
+// ── Import ────────────────────────────────────────────────────────────────────
+async function startImport(type) {
+  const fileInput = document.getElementById(type + 'File');
+  if (!fileInput.files.length) { toast('Please select a file first', 'error'); return; }
+
+  const progressDiv = document.getElementById(type + 'Progress');
+  const bar         = document.getElementById(type + 'Bar');
+  const msg         = document.getElementById(type + 'Msg');
+  progressDiv.style.display = '';
+  bar.style.width = '0%';
+  msg.textContent = 'Uploading…';
+
+  const endpoints = {
+    products: '/ebmpro_api/import_products.php',
+    customers: '/ebmpro_api/import_customers.php',
+    invoices:  '/ebmpro_api/import_invoices.php',
+    payments:  '/ebmpro_api/import_payments.php',
+  };
+
+  const endpoint = endpoints[type];
+  let offset = 0;
+  let storeId = null;
+  let storeCode = null;
+  if (type === 'products') storeId = document.getElementById('productsStore').value;
+  if (type === 'invoices') storeCode = document.getElementById('invoicesStore').value;
+
+  const file = fileInput.files[0];
+
+  const sendChunk = async () => {
+    const fd = new FormData();
+    fd.append('offset', offset);
+    if (offset === 0) fd.append('file', file);
+    if (storeId) fd.append('store_id', storeId);
+    if (storeCode) fd.append('store_code', storeCode);
+
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + getToken() },
+      body: fd,
+    });
+    const data = await res.json();
+
+    if (!data.success) {
+      msg.textContent = '❌ ' + (data.error || 'Import failed');
+      msg.style.color = '#dc3545';
+      return;
+    }
+
+    bar.style.width = data.percentage + '%';
+    msg.textContent = data.message;
+
+    if (!data.done) {
+      offset = data.processed;
+      await sendChunk();
+    } else {
+      bar.style.width = '100%';
+      toast(data.message);
+    }
+  };
+
+  try {
+    await sendChunk();
+  } catch (e) {
+    msg.textContent = '❌ Network error: ' + e.message;
+    msg.style.color = '#dc3545';
+  }
+}
+
+// ── Utilities ─────────────────────────────────────────────────────────────────
+function closeModal(id) {
+  document.getElementById(id).classList.remove('open');
+}
+
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// Clock
+setInterval(() => {
+  document.getElementById('clockDisplay').textContent = new Date().toLocaleTimeString('en-IE');
+}, 1000);
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+(async () => {
+  // Verify we're logged in as admin
+  const token = getToken();
+  if (!token) { window.location.href = '/ebmpro/'; return; }
+
+  // Quick auth check
+  const authCheck = await fetch('/ebmpro_api/auth.php?action=me', {
+    headers: { Authorization: 'Bearer ' + token },
+  }).then(r => r.json()).catch(() => null);
+
+  if (!authCheck?.success || authCheck?.data?.role !== 'admin') {
+    alert('Admin access required.');
+    window.location.href = '/ebmpro/';
+    return;
+  }
+
+  loadDashboard();
+})();
+</script>
+</body>
+</html>

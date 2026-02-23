@@ -144,7 +144,7 @@
 
     <!-- Product Search & Items Table -->
     <div class="card">
-      <div class="product-search-wrap mb-2">
+      <div class="product-search-wrap mb-2" style="display:flex;gap:.4rem;align-items:center;">
         <input
           type="search"
           id="productSearch"
@@ -153,7 +153,16 @@
           autocomplete="off"
           aria-label="Product search"
           aria-autocomplete="list"
+          style="flex:1;"
         >
+        <button
+          id="barcodeScanBtn"
+          class="btn btn-light"
+          title="Scan barcode with camera"
+          aria-label="Scan barcode"
+          onclick="Product.openBarcodeScanner(prod => { if (prod) Invoice.addProductToInvoice(prod); })"
+          style="flex-shrink:0;padding:.4rem .7rem;font-size:1.2rem;"
+        >📷</button>
       </div>
 
       <div class="table-wrap">
@@ -207,6 +216,9 @@
       </button>
       <button class="btn btn-light" onclick="App.showAddPaymentModal()">
         💳 Add Payment
+      </button>
+      <button class="btn btn-light" id="btnPaymentLink" onclick="App.sendPaymentLink()" title="Generate online payment link for this invoice">
+        🔗 Send Payment Link
       </button>
     </div>
 
@@ -563,6 +575,8 @@
       <div class="btn-row">
         <button class="btn btn-light" onclick="App.showAuditLog()">📋 View Audit Log</button>
         <button class="btn btn-light" onclick="triggerBackup()">💾 Download Backup</button>
+        <a href="/ebmpro/admin.html" class="btn btn-accent" target="_blank">🛡️ Admin Dashboard</a>
+        <a href="/ebmpro/help.html" class="btn btn-light" target="_blank">❓ Operator Manual</a>
       </div>
 
       <!-- Audit log table (inline) -->
@@ -581,6 +595,36 @@
             <tr><td colspan="5" class="text-center text-muted">Click "View Audit Log" to load.</td></tr>
           </tbody>
         </table>
+      </div>
+    </div>
+
+    <!-- Payment Gateway Settings -->
+    <div class="card settings-section">
+      <h3 class="mb-3">💳 Payment Gateway</h3>
+      <div class="form-row col-2">
+        <div class="form-group" style="grid-column:1/-1;">
+          <label class="form-label" for="setting_payment_gateway">Gateway</label>
+          <select id="setting_payment_gateway" name="payment_gateway" class="form-control" aria-label="Payment gateway">
+            <option value="stripe">Stripe</option>
+            <option value="revolut">Revolut Business</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="setting_stripe_publishable_key">Stripe Publishable Key</label>
+          <input type="text" id="setting_stripe_publishable_key" name="stripe_publishable_key" class="form-control" placeholder="pk_live_…" autocomplete="off">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="setting_stripe_secret_key">Stripe Secret Key</label>
+          <input type="password" id="setting_stripe_secret_key" name="stripe_secret_key" class="form-control" placeholder="sk_live_… (leave blank to keep)" autocomplete="new-password">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="setting_stripe_webhook_secret">Stripe Webhook Secret</label>
+          <input type="password" id="setting_stripe_webhook_secret" name="stripe_webhook_secret" class="form-control" placeholder="whsec_… (leave blank to keep)" autocomplete="new-password">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="setting_revolut_api_key">Revolut API Key</label>
+          <input type="password" id="setting_revolut_api_key" name="revolut_api_key" class="form-control" placeholder="Leave blank to keep" autocomplete="new-password">
+        </div>
       </div>
     </div>
   </section>
@@ -896,7 +940,7 @@ async function loadProductList(query = '') {
       : '/ebmpro_api/products.php';
     const resp = await fetch(url, { headers: Auth.getAuthHeaders() });
     const data = await resp.json();
-    const list = Array.isArray(data) ? data : (data.products || []);
+    const list = data.data || (Array.isArray(data) ? data : (data.products || []));
     if (!list.length) {
       tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No products found.</td></tr>';
       return;
@@ -956,7 +1000,56 @@ async function triggerBackup() {
 function escH(str) {
   return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
+
+/* ── PWA Install button ────────────────────────────────────── */
+let _deferredInstallPrompt = null;
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  _deferredInstallPrompt = e;
+  const btn = document.getElementById('pwaInstallBtn');
+  if (btn) btn.classList.remove('hidden');
+});
+
+async function pwaInstall() {
+  if (!_deferredInstallPrompt) return;
+  _deferredInstallPrompt.prompt();
+  const { outcome } = await _deferredInstallPrompt.userChoice;
+  if (outcome === 'accepted') {
+    document.getElementById('pwaInstallBtn')?.classList.add('hidden');
+  }
+  _deferredInstallPrompt = null;
+}
 </script>
+
+<!-- Floating Help Button -->
+<button
+  id="helpFloatBtn"
+  aria-label="Open help"
+  onclick="window.open('/ebmpro/help.html','_blank')"
+  style="
+    position:fixed;bottom:1.5rem;right:1.5rem;z-index:7000;
+    width:48px;height:48px;border-radius:50%;border:none;cursor:pointer;
+    background:#1a3a2a;color:#fff;font-size:1.4rem;font-weight:700;
+    box-shadow:0 3px 12px rgba(0,0,0,.25);
+    display:flex;align-items:center;justify-content:center;
+    transition:transform .15s;
+  "
+  onmouseenter="this.style.transform='scale(1.1)'"
+  onmouseleave="this.style.transform='scale(1)'"
+  title="Open Operator Manual">?</button>
+
+<!-- PWA Install Button (hidden until beforeinstallprompt fires) -->
+<button
+  id="pwaInstallBtn"
+  class="hidden"
+  onclick="pwaInstall()"
+  style="
+    position:fixed;bottom:5rem;right:1.5rem;z-index:7000;
+    background:#1a3a2a;color:#fff;border:none;border-radius:8px;
+    padding:.5rem 1rem;cursor:pointer;font-size:.85rem;font-weight:600;
+    box-shadow:0 3px 12px rgba(0,0,0,.2);
+  "
+  title="Install app on this device">📲 Install App</button>
 
 </body>
 </html>
