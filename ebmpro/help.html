@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Operator Manual — Easy Builders Merchant Pro</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Georgia, 'Times New Roman', serif; font-size: 14pt; line-height: 1.6; color: #1a1a1a; background: #fff; max-width: 850px; margin: 0 auto; padding: 2rem; }
+    h1 { font-size: 2rem; color: #1a3a2a; border-bottom: 3px solid #1a3a2a; padding-bottom: .5rem; margin-bottom: 1.5rem; }
+    h2 { font-size: 1.4rem; color: #1a3a2a; margin: 2rem 0 .8rem; padding: .4rem 0; border-bottom: 1.5px solid #c5e0c5; }
+    h3 { font-size: 1.1rem; color: #2d5a3d; margin: 1.2rem 0 .5rem; }
+    h4 { font-size: 1rem; color: #333; margin: 1rem 0 .3rem; font-style: italic; }
+    p { margin-bottom: .7rem; }
+    ol, ul { margin-left: 1.5rem; margin-bottom: .7rem; }
+    li { margin-bottom: .3rem; }
+    .step { counter-increment: step; position: relative; padding-left: 2.5rem; margin-bottom: .5rem; }
+    .step::before { content: counter(step); position: absolute; left: 0; top: 0; background: #1a3a2a; color: #fff; width: 1.6rem; height: 1.6rem; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-family: Arial, sans-serif; font-size: .8rem; font-weight: 700; line-height: 1; }
+    .steps { counter-reset: step; }
+    .tip { background: #f0fff0; border-left: 4px solid #28a745; padding: .5rem .8rem; margin: .5rem 0; border-radius: 0 6px 6px 0; }
+    .warning { background: #fff3cd; border-left: 4px solid #ffc107; padding: .5rem .8rem; margin: .5rem 0; border-radius: 0 6px 6px 0; }
+    .danger { background: #fff0f0; border-left: 4px solid #dc3545; padding: .5rem .8rem; margin: .5rem 0; border-radius: 0 6px 6px 0; }
+    .info { background: #e8f4fd; border-left: 4px solid #17a2b8; padding: .5rem .8rem; margin: .5rem 0; border-radius: 0 6px 6px 0; }
+    code { font-family: 'Courier New', monospace; background: #f0f0f0; padding: .1em .3em; border-radius: 3px; font-size: .9em; }
+    table { width: 100%; border-collapse: collapse; margin: .7rem 0; font-size: .92rem; }
+    th { background: #1a3a2a; color: #fff; padding: .4rem .6rem; text-align: left; }
+    td { padding: .35rem .6rem; border-bottom: 1px solid #ddd; }
+    tr:nth-child(even) td { background: #f7fff7; }
+    .cover { text-align: center; padding: 3rem 1rem; border: 2px solid #1a3a2a; border-radius: 8px; margin-bottom: 2rem; }
+    .cover .shop-name { font-size: 1.8rem; font-weight: 700; color: #1a3a2a; }
+    .cover .subtitle { font-size: 1.1rem; color: #555; margin-top: .5rem; }
+    .cover .version { font-size: .85rem; color: #888; margin-top: 1rem; }
+    .toc { background: #f7fff7; border: 1px solid #c5e0c5; border-radius: 8px; padding: 1rem 1.5rem; margin-bottom: 2rem; }
+    .toc li { font-family: Arial, Helvetica, sans-serif; font-size: .92rem; }
+    .toc a { color: #1a3a2a; text-decoration: none; }
+    .toc a:hover { text-decoration: underline; }
+    .section-break { border: none; border-top: 2px dashed #c5e0c5; margin: 2.5rem 0; }
+    .no-print { display: block; }
+    @media print {
+      body { font-size: 11pt; padding: 0; }
+      .no-print { display: none !important; }
+      h1 { font-size: 1.6rem; }
+      h2 { font-size: 1.2rem; page-break-after: avoid; }
+      h3 { font-size: 1rem; page-break-after: avoid; }
+      .tip, .warning, .danger, .info { page-break-inside: avoid; }
+      table { page-break-inside: avoid; font-size: .85rem; }
+      .cover { page-break-after: always; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Print button (no-print) -->
+<div class="no-print" style="text-align:right;margin-bottom:1rem;">
+  <a href="/ebmpro/" style="color:#1a3a2a;font-size:.9rem;margin-right:1rem;">← Back to App</a>
+  <button onclick="window.print()" style="background:#1a3a2a;color:#fff;border:none;padding:.5rem 1.2rem;border-radius:6px;cursor:pointer;font-size:.9rem;">🖨️ Print Manual</button>
+</div>
+
+<!-- Cover page -->
+<div class="cover">
+  <div style="font-size:3rem;">🏗️</div>
+  <div class="shop-name">Easy Builders Merchant Pro</div>
+  <div class="subtitle">Operator Manual</div>
+  <div style="margin-top:1rem;color:#555;">Falcarragh &amp; Gweedore Stores</div>
+  <div class="version">Version 2.0 — <span id="docDate"></span></div>
+  <script>document.getElementById('docDate').textContent = new Date().toLocaleDateString('en-IE',{year:'numeric',month:'long'});</script>
+</div>
+
+<!-- Table of Contents -->
+<div class="toc">
+  <h3 style="margin-top:0;font-family:Arial,sans-serif;">Contents</h3>
+  <ol>
+    <li><a href="#login">Logging In</a></li>
+    <li><a href="#daily-ops">Daily Operations</a></li>
+    <li><a href="#invoices">Creating &amp; Managing Invoices</a></li>
+    <li><a href="#products">Products &amp; Searching</a></li>
+    <li><a href="#barcode">Barcode Scanning</a></li>
+    <li><a href="#customers">Customers</a></li>
+    <li><a href="#payments">Payments</a></li>
+    <li><a href="#quotes">Quotes</a></li>
+    <li><a href="#reports">Reports</a></li>
+    <li><a href="#offline">Working Offline</a></li>
+    <li><a href="#troubleshoot">If Something Goes Wrong</a></li>
+    <li><a href="#admin">Admin Only</a></li>
+  </ol>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<h1 id="login">1. Logging In</h1>
+
+<div class="steps">
+<div class="step">Open your web browser (Chrome or Safari recommended).</div>
+<div class="step">Go to the app URL provided by your manager.</div>
+<div class="step">Enter your <strong>Username</strong> and <strong>Password</strong>.</div>
+<div class="step">Click <strong>Login</strong>. You will see the New Invoice screen.</div>
+</div>
+
+<div class="tip">💡 <strong>Tip:</strong> On a phone or tablet, tap the menu icon in your browser and select <em>Add to Home Screen</em> to install the app so it opens like a normal app.</div>
+
+<div class="warning">⚠️ <strong>Never share your password</strong> with anyone. If you think someone else knows it, ask your manager to reset it immediately.</div>
+
+<hr class="section-break">
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<h1 id="daily-ops">2. Daily Operations Overview</h1>
+
+<p>When you start your shift:</p>
+<ol>
+  <li>Log in as described above.</li>
+  <li>Check the <strong>store selector</strong> at the top of the screen — make sure it shows the correct store (Falcarragh or Gweedore).</li>
+  <li>Check the connection indicator — <strong>🟢 Online</strong> means you are connected to the server. <strong>🔴 Offline</strong> means you are working locally — see Section 10.</li>
+</ol>
+
+<p>When you finish your shift:</p>
+<ol>
+  <li>Make sure all invoices are saved (not just drafts).</li>
+  <li>Click your username in the top right → <strong>Logout</strong>.</li>
+</ol>
+
+<hr class="section-break">
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<h1 id="invoices">3. Creating &amp; Managing Invoices</h1>
+
+<h2>3.1 How to Create a New Invoice</h2>
+<div class="steps">
+<div class="step">Click <strong>➕ New Invoice</strong> in the left sidebar (or bottom bar on mobile).</div>
+<div class="step">Search for the customer in the <strong>Customer</strong> box, or click <strong>💵 Cash Sale</strong> for a walk-in customer.</div>
+<div class="step">Check the <strong>Invoice Date</strong> and <strong>Due Date</strong> are correct.</div>
+<div class="step">Search for products in the <strong>Product Search</strong> box (see Section 4) or scan a barcode (see Section 5).</div>
+<div class="step">Adjust <strong>Qty</strong> (quantity) and <strong>Disc%</strong> (discount) for each line if needed.</div>
+<div class="step">Click <strong>💾 Save Invoice</strong>.</div>
+</div>
+
+<div class="tip">💡 The invoice number is generated automatically in the format <code>FAL-XXXXX</code> (Falcarragh) or <code>GWE-XXXXX</code> (Gweedore).</div>
+
+<h2>3.2 How to Apply a Discount</h2>
+<p>On each invoice line, there is a <strong>Disc%</strong> column. Type the discount percentage (e.g. <code>10</code> for 10% off). The totals update automatically.</p>
+
+<h2>3.3 How to Change VAT Rate</h2>
+<p>Each line has a <strong>VAT%</strong> column. Common rates are:</p>
+<table>
+  <tr><th>Rate</th><th>When to use</th></tr>
+  <tr><td>23%</td><td>Standard rate — most hardware, tools, materials</td></tr>
+  <tr><td>0%</td><td>Zero-rated — certain animal feeds, seeds, fertilisers</td></tr>
+  <tr><td>9%</td><td>Reduced rate — not common for this type of business</td></tr>
+</table>
+<p>Click on the VAT% cell to change it. The line total will recalculate.</p>
+
+<h2>3.4 How to Print an Invoice</h2>
+<div class="steps">
+<div class="step">Save the invoice first.</div>
+<div class="step">Click <strong>🖨️ Print PDF</strong>.</div>
+<div class="step">A PDF opens — use your browser's print dialog to print it, or save it.</div>
+</div>
+
+<h2>3.5 How to Email an Invoice</h2>
+<div class="steps">
+<div class="step">Make sure the customer has an email address saved (visible in the customer details).</div>
+<div class="step">Click <strong>📧 Email</strong>.</div>
+<div class="step">Confirm the email address shown and click <strong>Send</strong>.</div>
+<div class="step">The invoice status shows <em>Sent</em>. When the customer opens it, it shows <em>Opened</em>.</div>
+</div>
+
+<h2>3.6 How to Send a Payment Link</h2>
+<div class="steps">
+<div class="step">Open the saved invoice.</div>
+<div class="step">Click <strong>🔗 Send Payment Link</strong>.</div>
+<div class="step">A payment link is automatically copied to your clipboard and opens in a new browser tab.</div>
+<div class="step">Paste and send it to the customer via email, WhatsApp, or text message.</div>
+<div class="step">When the customer pays online, the invoice is automatically marked as Paid.</div>
+</div>
+
+<h2>3.7 How to Make a Mistake — Edit an Invoice</h2>
+<div class="danger">🚫 <strong>You cannot edit a paid invoice.</strong> If an invoice is already paid and is wrong, you must cancel it and create a new one. See below.</div>
+
+<div class="steps">
+<div class="step">Find the invoice in the <strong>Invoices</strong> list.</div>
+<div class="step">Open the invoice by clicking on it.</div>
+<div class="step">If it is <strong>not</strong> paid: make your changes and click <strong>Save</strong>.</div>
+<div class="step">If it <strong>is</strong> paid: click <strong>Cancel Invoice</strong> and confirm. Then create a new correct invoice.</div>
+</div>
+
+<hr class="section-break">
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<h1 id="products">4. Products &amp; Searching</h1>
+
+<h2>4.1 How to Search for a Product (Typing)</h2>
+<p>In the invoice editor, click the product search box and start typing:</p>
+<ul>
+  <li>You can type the <strong>product code</strong> (e.g. <code>TIM001</code>).</li>
+  <li>You can type part of the <strong>description</strong> (e.g. <code>nail</code> finds "Steel Nails 60mm").</li>
+  <li>You can type the <strong>barcode number</strong>.</li>
+</ul>
+<p>Results appear as a dropdown after a short pause. Click a result to add it to the invoice.</p>
+
+<div class="tip">💡 Use <strong>arrow keys ↑↓</strong> to navigate the results and <strong>Enter</strong> to select without touching the mouse.</div>
+
+<hr class="section-break">
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<h1 id="barcode">5. Barcode Scanning</h1>
+
+<h2>5.1 Using a USB or Bluetooth Scanner</h2>
+<p>These scanners act like a keyboard — they "type" the barcode number for you.</p>
+<div class="steps">
+<div class="step">Click on the product search box in the invoice editor.</div>
+<div class="step">Scan the barcode with the scanner.</div>
+<div class="step">The barcode number is entered automatically. If the product is found, it is added to the invoice.</div>
+</div>
+
+<h2>5.2 Using the Camera on a Phone or Tablet</h2>
+<div class="steps">
+<div class="step">In the invoice editor, tap the <strong>📷 camera icon</strong> next to the product search box.</div>
+<div class="step">Point your camera at the barcode on the product.</div>
+<div class="step">The app reads the barcode and adds the product automatically.</div>
+</div>
+
+<div class="tip">💡 Make sure you allow the browser to use your camera when it asks. You only need to do this once.</div>
+
+<div class="warning">⚠️ <strong>Product not found?</strong> If the barcode scan returns "Product not found", search manually by typing the product name. The product may not have a barcode set up in the system yet — contact your manager.</div>
+
+<hr class="section-break">
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<h1 id="customers">6. Customers</h1>
+
+<h2>6.1 How to Find an Existing Customer</h2>
+<p>In the Customer search box at the top of the invoice, type the customer's name, phone number, or email. Results appear as a dropdown.</p>
+
+<h2>6.2 How to Add a New Customer</h2>
+<div class="steps">
+<div class="step">Click <strong>➕ Add New Customer</strong> in the invoice editor (or go to the Customers screen).</div>
+<div class="step">Fill in the customer details. <strong>Company Name</strong> is required.</div>
+<div class="step">Click <strong>Save Customer</strong>. The customer is now linked to the invoice.</div>
+</div>
+
+<h2>6.3 How to Check Outstanding Payments</h2>
+<div class="steps">
+<div class="step">Go to the <strong>Customers</strong> screen.</div>
+<div class="step">Search for or click on the customer.</div>
+<div class="step">You will see all their invoices and outstanding balances.</div>
+</div>
+
+<hr class="section-break">
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<h1 id="payments">7. Taking Payments</h1>
+
+<h2>7.1 How to Take a Cash Payment</h2>
+<div class="steps">
+<div class="step">Open the invoice.</div>
+<div class="step">Click <strong>💵 Add Payment</strong>.</div>
+<div class="step">Select <strong>Cash</strong> from the payment method dropdown.</div>
+<div class="step">Enter the amount received.</div>
+<div class="step">Click <strong>Save Payment</strong>.</div>
+</div>
+
+<h2>7.2 How to Take a Card Payment</h2>
+<div class="steps">
+<div class="step">Process the payment on your card terminal as normal.</div>
+<div class="step">Once the terminal shows approved, open the invoice in EBM Pro.</div>
+<div class="step">Click <strong>Add Payment</strong>, select <strong>Credit/Debit Card</strong>, enter the amount, click <strong>Save Payment</strong>.</div>
+</div>
+
+<h2>7.3 Payment Methods Available</h2>
+<table>
+  <tr><th>Method</th><th>When to use</th></tr>
+  <tr><td>Cash</td><td>Customer pays with notes/coins</td></tr>
+  <tr><td>Cheque</td><td>Customer pays by cheque</td></tr>
+  <tr><td>Credit/Debit Card</td><td>Customer pays by card on terminal</td></tr>
+  <tr><td>Online</td><td>Customer paid via payment link</td></tr>
+  <tr><td>PayPal</td><td>Customer paid via PayPal</td></tr>
+  <tr><td>Pro-Forma</td><td>Payment in advance required</td></tr>
+  <tr><td>Strictly 30 Days</td><td>Account customer — 30-day terms</td></tr>
+</table>
+
+<hr class="section-break">
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<h1 id="quotes">8. Quotes</h1>
+
+<h2>8.1 How to Create a Quote</h2>
+<div class="steps">
+<div class="step">Click <strong>➕ New Invoice</strong>.</div>
+<div class="step">At the top of the invoice editor, click the <strong>Quote</strong> button (to the right of "Invoice").</div>
+<div class="step">Add customer, products, and details as normal.</div>
+<div class="step">Click <strong>Save Quote</strong>. The number will be in the format <code>FAL-Q-XXXX</code>.</div>
+</div>
+
+<h2>8.2 How to Convert a Quote to an Invoice</h2>
+<div class="steps">
+<div class="step">Find the quote in the Invoices list (filter by type: Quote).</div>
+<div class="step">Open the quote.</div>
+<div class="step">Click <strong>Convert to Invoice</strong>.</div>
+<div class="step">A new invoice is created with the same items. The quote is marked as converted.</div>
+</div>
+
+<hr class="section-break">
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<h1 id="reports">9. Reports</h1>
+
+<div class="steps">
+<div class="step">Click <strong>📊 Reports</strong> in the sidebar.</div>
+<div class="step">Select the date range and store.</div>
+<div class="step">View totals for sales, VAT, payments received, and outstanding balances.</div>
+<div class="step">Click <strong>Export</strong> to download as a spreadsheet if needed.</div>
+</div>
+
+<h3>End of Day Report</h3>
+<p>Run the Reports section at the end of each day to see total takings by payment method. Print or save this as a daily record.</p>
+
+<hr class="section-break">
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<h1 id="offline">10. Working Offline</h1>
+
+<p>The app works <strong>even without an internet connection</strong>.</p>
+
+<div class="info">ℹ️ When offline, you will see a red <strong>🔴 Offline</strong> indicator at the top of the screen and an orange "OFFLINE MODE" banner.</div>
+
+<p>While offline you can:</p>
+<ul>
+  <li>Create new invoices (saved locally on your device)</li>
+  <li>Search products already loaded</li>
+  <li>Add payments</li>
+</ul>
+
+<p>When your internet connection comes back, the app <strong>automatically syncs</strong> everything saved offline. You will see a confirmation message "X items synced".</p>
+
+<div class="warning">⚠️ <strong>Important:</strong> Do not clear your browser data while offline — you may lose unsynchronised invoices. Wait until you see "🟢 Online" before clearing history.</div>
+
+<hr class="section-break">
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<h1 id="troubleshoot">11. If Something Goes Wrong</h1>
+
+<h2>Internet Goes Off</h2>
+<p>The app will switch to offline mode automatically. Keep working as normal. When internet comes back, everything syncs automatically.</p>
+
+<h2>The App is Slow</h2>
+<ul>
+  <li>Try refreshing the page (press F5 or pull down to refresh on mobile).</li>
+  <li>If still slow, close other browser tabs.</li>
+  <li>If it remains slow, report it to your manager — it may be a server issue.</li>
+</ul>
+
+<h2>A Product Won't Scan</h2>
+<ul>
+  <li>Make sure the barcode is clean and not damaged.</li>
+  <li>Try scanning again from a slightly different angle or distance.</li>
+  <li>If still not working, search manually by typing the product name or code.</li>
+  <li>If the product should be in the system, report the missing barcode to the manager so it can be added.</li>
+</ul>
+
+<h2>Made a Mistake on an Invoice</h2>
+<ul>
+  <li>If the invoice is <strong>not paid</strong>: open it, make changes, save.</li>
+  <li>If the invoice <strong>is paid</strong>: cancel the invoice and create a new correct one. <strong>Never alter a paid invoice.</strong></li>
+</ul>
+
+<h2>Forgot Password</h2>
+<p>Ask your manager or admin to reset your password in the Admin Dashboard.</p>
+
+<h2>Who to Contact for Help</h2>
+<table>
+  <tr><th>Problem</th><th>Contact</th></tr>
+  <tr><td>App not loading</td><td>Your IT contact / system administrator</td></tr>
+  <tr><td>Can't log in</td><td>Your manager</td></tr>
+  <tr><td>Product not in system</td><td>Your manager</td></tr>
+  <tr><td>Wrong invoice amount</td><td>Your manager</td></tr>
+</table>
+
+<hr class="section-break">
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<h1 id="admin">12. Admin Only</h1>
+
+<div class="warning">⚠️ This section is for <strong>admins only</strong>. Standard operators will not see these options.</div>
+
+<h2>12.1 How to Add a New Operator</h2>
+<div class="steps">
+<div class="step">Go to the Admin Dashboard (top-right menu → Admin, or navigate to <code>/ebmpro/admin.html</code>).</div>
+<div class="step">Click the <strong>Operators</strong> tab.</div>
+<div class="step">Click <strong>➕ Add Operator</strong>.</div>
+<div class="step">Enter username, role (Counter / Manager / Admin), store, and password.</div>
+<div class="step">Click <strong>Save</strong>.</div>
+</div>
+
+<h2>12.2 How to Reset a Password</h2>
+<div class="steps">
+<div class="step">Go to Admin Dashboard → Operators tab.</div>
+<div class="step">Find the operator and click <strong>Reset PW</strong>.</div>
+<div class="step">Enter the new password (minimum 8 characters).</div>
+<div class="step">Tell the operator their new password in person — never by email or text.</div>
+</div>
+
+<h2>12.3 How to Download a Backup</h2>
+<div class="steps">
+<div class="step">Go to Admin Dashboard → <strong>Backups</strong> tab.</div>
+<div class="step">Click <strong>⬇️ Download</strong> next to any backup to save it to your computer.</div>
+<div class="step">Or click <strong>💾 Create Backup Now</strong> to generate a fresh backup immediately.</div>
+</div>
+
+<div class="info">ℹ️ Backups are also created automatically every night at midnight. The last 30 backups are kept. Store a copy off-site (e.g. USB drive or cloud storage) for safety.</div>
+
+<h2>12.4 How to Import Products / Customers</h2>
+<div class="steps">
+<div class="step">Export your data from the Easy Invoicing Access database as XML or CSV.</div>
+<div class="step">Go to Admin Dashboard → <strong>Import</strong> tab.</div>
+<div class="step">Choose the correct import type (Products, Customers, Invoices, or Payments).</div>
+<div class="step">Click <strong>Choose File</strong> and select your exported file.</div>
+<div class="step">Click <strong>Import</strong>. A progress bar shows the import status.</div>
+<div class="step">When complete, a summary shows how many records were inserted, skipped (duplicates), or had errors.</div>
+</div>
+
+<div class="tip">💡 The import is safe to run multiple times — it will not create duplicate products/customers. Existing records (matched by product code or legacy ID) are skipped.</div>
+
+<hr class="section-break">
+
+<p style="text-align:center;color:#888;font-size:.85rem;margin-top:2rem;">
+  Easy Builders Merchant Pro — Operator Manual<br>
+  Easy Builders Merchant, Falcarragh &amp; Gweedore, Co. Donegal, Ireland
+</p>
+
+</body>
+</html>

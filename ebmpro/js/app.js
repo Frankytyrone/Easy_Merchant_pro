@@ -542,6 +542,43 @@ const App = (() => {
     }
   }
 
+  /* ── Send Payment Link ────────────────────────────────────── */
+  async function sendPaymentLink() {
+    const inv = typeof Invoice !== 'undefined' ? Invoice.getCurrent() : null;
+    if (!inv || !inv.id) {
+      showToast('Please save the invoice first before sending a payment link.', 'warning');
+      return;
+    }
+    if (parseFloat(inv.balance || inv.total || 0) <= 0) {
+      showToast('Invoice balance is zero — nothing to pay.', 'warning');
+      return;
+    }
+
+    const btn = document.getElementById('btnPaymentLink');
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ Generating…'; }
+
+    try {
+      const resp = await fetch('/ebmpro_api/create_payment_link.php', {
+        method: 'POST',
+        headers: Object.assign({ 'Content-Type': 'application/json' }, Auth.getAuthHeaders()),
+        body: JSON.stringify({ invoice_id: inv.id }),
+      });
+      const data = await resp.json();
+      if (data.success && data.url) {
+        // Copy to clipboard and open
+        try { await navigator.clipboard.writeText(data.url); } catch { /* ignore */ }
+        showToast('Payment link generated and copied to clipboard!', 'success', 5000);
+        window.open(data.url, '_blank', 'noopener,noreferrer');
+      } else {
+        showToast(data.error || 'Failed to generate payment link. Check payment settings.', 'danger');
+      }
+    } catch (err) {
+      showToast('Network error — could not generate payment link.', 'danger');
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = '🔗 Send Payment Link'; }
+    }
+  }
+
   document.addEventListener('DOMContentLoaded', init);
 
   return {
@@ -567,7 +604,9 @@ const App = (() => {
     printCurrentInvoice,
     downloadCurrentPDF,
     saveCurrentInvoice,
+    sendPaymentLink,
     showToast,
-    updateHeaderUser
+    updateHeaderUser,
+    toast: showToast,
   };
 })();
