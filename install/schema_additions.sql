@@ -1,5 +1,9 @@
 -- Easy Builders Merchant Pro — Schema Additions
 -- Run this AFTER the main schema.sql to add columns required by the import system
+--
+-- Note: ADD COLUMN IF NOT EXISTS requires MySQL 8.0.27+ or MariaDB 10.3.3+
+-- For older versions, check column existence manually before running this file
+-- or use the web installer which handles this via PHP/PDO.
 SET NAMES utf8mb4;
 
 -- Add barcode column and legacy_id to products if not present

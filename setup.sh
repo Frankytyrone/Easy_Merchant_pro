@@ -37,8 +37,8 @@ apt-get install -y -qq \
     php8.1-bcmath \
     libapache2-mod-php8.1
 
-# Fallback to php if 8.1 not available
-if ! php --version &>/dev/null; then
+# Fallback to generic php if php8.1 binary not available
+if ! php8.1 --version &>/dev/null && ! php --version &>/dev/null; then
     apt-get install -y -qq php php-mysql php-mbstring php-zip php-xml php-curl php-bcmath libapache2-mod-php
 fi
 
@@ -58,10 +58,11 @@ mkdir -p "${BACKUPS_DIR}"
 # ── 5. PHP configuration (increase limits for large imports) ──────────────────
 echo -e "${GREEN}[5/8] Configuring PHP limits…${NC}"
 if [ -f "${PHP_INI}" ]; then
-    sed -i 's/^upload_max_filesize.*/upload_max_filesize = 64M/'   "${PHP_INI}"
-    sed -i 's/^post_max_size.*/post_max_size = 64M/'               "${PHP_INI}"
-    sed -i 's/^max_execution_time.*/max_execution_time = 300/'     "${PHP_INI}"
-    sed -i 's/^memory_limit.*/memory_limit = 256M/'                "${PHP_INI}"
+    # Handle both active and commented-out directives
+    sed -i 's/^[;]*\s*upload_max_filesize\s*=.*/upload_max_filesize = 64M/'   "${PHP_INI}"
+    sed -i 's/^[;]*\s*post_max_size\s*=.*/post_max_size = 64M/'               "${PHP_INI}"
+    sed -i 's/^[;]*\s*max_execution_time\s*=.*/max_execution_time = 300/'     "${PHP_INI}"
+    sed -i 's/^[;]*\s*memory_limit\s*=.*/memory_limit = 256M/'                "${PHP_INI}"
     echo "PHP limits updated."
 else
     echo -e "${YELLOW}  Warning: ${PHP_INI} not found — set limits manually.${NC}"

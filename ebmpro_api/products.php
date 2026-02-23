@@ -37,8 +37,8 @@ try {
             $q   = trim($_GET['q']);
             $res = [];
 
-            // 1. Exact barcode match (USB/Bluetooth scanner sends exact barcode)
-            if (preg_match('/^\d{6,20}$/', $q)) {
+            // 1. Exact barcode match (USB/Bluetooth scanner — numeric or alphanumeric barcodes)
+            if (preg_match('/^[A-Z0-9\-]{4,50}$/i', $q)) {
                 $stmt = $pdo->prepare(
                     'SELECT * FROM products WHERE active = 1 AND barcode = ? LIMIT 5'
                 );

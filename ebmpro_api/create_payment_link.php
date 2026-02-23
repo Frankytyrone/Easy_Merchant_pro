@@ -78,13 +78,14 @@ if ($gateway === 'revolut') {
     }
 
     $data = json_decode($response, true);
-    $url  = $data['checkout_url'] ?? ($data['public_id'] ? 'https://checkout.revolut.com/pay/' . $data['public_id'] : null);
+    $url  = $data['checkout_url'] ?? (isset($data['public_id']) ? 'https://checkout.revolut.com/pay/' . $data['public_id'] : null);
     if (!$url) {
         jsonResponse(['success' => false, 'error' => 'Revolut did not return a checkout URL'], 502);
     }
 
-    // Save link to invoice notes
-    $pdo->prepare("UPDATE invoices SET notes = CONCAT(COALESCE(notes,''), '\n[Revolut link: {$url}]') WHERE id = ?")->execute([$invoiceId]);
+    // Save link to invoice notes via parameterized query
+    $pdo->prepare("UPDATE invoices SET notes = CONCAT(COALESCE(notes,''), ?) WHERE id = ?")
+        ->execute(["\n[Revolut link: {$url}]", $invoiceId]);
 
     jsonResponse(['success' => true, 'url' => $url, 'gateway' => 'revolut']);
 }
@@ -126,7 +127,8 @@ if (empty($linkResponse['url'])) {
 $url = $linkResponse['url'];
 
 // Save link reference
-$pdo->prepare("UPDATE invoices SET notes = CONCAT(COALESCE(notes,''), '\n[Stripe link: {$url}]') WHERE id = ?")->execute([$invoiceId]);
+$pdo->prepare("UPDATE invoices SET notes = CONCAT(COALESCE(notes,''), ?) WHERE id = ?")
+    ->execute(["\n[Stripe link: {$url}]", $invoiceId]);
 
 auditLog($pdo, (int)$auth['user_id'], $auth['username'], $invoice['store_code'],
     'payment_link', 'invoice', $invoiceId, null, ['url' => $url, 'gateway' => 'stripe']);

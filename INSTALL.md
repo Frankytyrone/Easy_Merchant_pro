@@ -190,14 +190,15 @@ crontab -e
 Add these lines:
 
 ```cron
-# Nightly backup at midnight
-0 0 * * * php /var/www/ebmpro/ebmpro_api/admin.php >> /var/log/ebmpro_backup.log 2>&1
+# Nightly backup at midnight — uses curl with admin token
+# Replace TOKEN with a long-lived admin token generated from the auth API
+# 0 0 * * * curl -s -H "Authorization: Bearer TOKEN" https://ebmpro.easybuildersdonegal.ie/ebmpro_api/admin.php?action=run_backup > /dev/null 2>&1
 
 # Payment reminders — every hour
 0 * * * * php /var/www/ebmpro/cron/send_reminders.php >> /var/log/ebmpro_reminders.log 2>&1
 ```
 
-> **Note:** The backup cron calls the backup endpoint internally. For production, set a cron that uses curl with a saved admin token, or adapt the script to run directly via CLI.
+> **Note on backup cron:** The backup endpoint requires a valid Bearer token. Generate a long-lived admin token by logging in via the API, then use it in the curl command above. Alternatively, copy the backup script logic into a standalone CLI PHP file that reads the config directly without HTTP auth.
 
 ---
 

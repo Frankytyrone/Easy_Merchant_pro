@@ -24,7 +24,7 @@ INSERT IGNORE INTO products (product_code, barcode, description, category, price
 ('AGR002', '5391234560081', 'Horse & Pony Nuts 25kg', 'Animal Feed', 18.99, 0.00, 200.000, 'bag', 1),
 ('AGR003', '5391234560082', 'Grass Seed Amenity Mix 20kg', 'Seeds', 32.00, 0.00, 45.000, 'bag', 1),
 ('FER001', '5391234560090', 'Calcium Ammonium Nitrate 25kg', 'Fertiliser', 28.50, 0.00, 120.000, 'bag', 1),
-('TOO001', '5391234560100', 'Plasterer''s Trowel 16" Stainless', 'Tools', 22.99, 23.00, 35.000, 'each', 1),
+('TOO001', '5391234560100', 'Plasterer Trowel 16 inch Stainless Steel', 'Tools', 22.99, 23.00, 35.000, 'each', 1),
 ('TOO002', '5391234560101', 'Wheelbarrow 90L Galvanised Steel', 'Tools', 69.99, 23.00, 12.000, 'each', 1),
 ('GAT001', '5391234560110', 'Farm Gate 10ft Steel 5-Bar Galvanised', 'Fencing', 89.00, 23.00, 8.000, 'each', 1);
 

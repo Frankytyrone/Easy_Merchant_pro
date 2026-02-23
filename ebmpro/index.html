@@ -1013,8 +1013,8 @@ window.addEventListener('beforeinstallprompt', e => {
 async function pwaInstall() {
   if (!_deferredInstallPrompt) return;
   _deferredInstallPrompt.prompt();
-  const { outcome } = await _deferredInstallPrompt.userChoice;
-  if (outcome === 'accepted') {
+  const choice = await _deferredInstallPrompt.userChoice;
+  if (choice.outcome === 'accepted') {
     document.getElementById('pwaInstallBtn')?.classList.add('hidden');
   }
   _deferredInstallPrompt = null;
