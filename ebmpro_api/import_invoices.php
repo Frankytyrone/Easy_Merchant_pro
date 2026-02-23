@@ -37,7 +37,7 @@ $pdo = getDb();
 session_start();
 
 $offset    = max(0, (int)($_POST['offset'] ?? 0));
-$chunkSize = 500;
+$chunkSize = 10000;
 $storeCode = strtoupper(trim($_POST['store_code'] ?? 'FAL'));
 
 if ($offset === 0) {

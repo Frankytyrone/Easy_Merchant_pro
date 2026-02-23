@@ -37,7 +37,7 @@ $pdo = getDb();
 session_start();
 
 $offset    = max(0, (int)($_POST['offset'] ?? 0));
-$chunkSize = 500;
+$chunkSize = 10000;
 $storeId   = !empty($_POST['store_id']) ? (int)$_POST['store_id'] : null;
 
 if ($offset === 0) {
