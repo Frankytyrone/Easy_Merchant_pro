@@ -11,7 +11,7 @@ const Invoice = (() => {
     const today = todayStr();
     return {
       id:               null,
-      store_code:        App ? App.getCurrentStore() : 'FAL',
+      store_code:        'FAL',
       invoice_type:     'invoice',  // 'invoice' | 'quote'
       customer_id:      null,
       customer_name:    '',
