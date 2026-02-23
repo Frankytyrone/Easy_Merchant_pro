@@ -268,6 +268,31 @@ chown www-data:www-data /var/www/ebmpro/ebmpro_api/config.php
 
 ---
 
+## PHP Configuration for Large Imports
+
+For importing large product/customer files (65,000+ records),
+update these values in `C:\xampp\php\php.ini` (Windows/XAMPP) or
+`/etc/php/8.1/apache2/php.ini` (Linux):
+
+```ini
+max_execution_time = 300
+max_input_time = 300
+memory_limit = 512M
+upload_max_filesize = 128M
+post_max_size = 128M
+```
+
+After changing, restart Apache in XAMPP Control Panel (Windows) or run:
+```bash
+systemctl reload apache2
+```
+
+> **Note:** On a VPS/Linux server using Apache, these limits are set
+> automatically via the `.htaccess` files included in `ebmpro/` and
+> `ebmpro_api/`. No manual php.ini changes are needed on VPS deployments.
+
+---
+
 ## Troubleshooting
 
 | Problem | Solution |

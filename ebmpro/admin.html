@@ -147,7 +147,7 @@
 <div id="tabImport" class="tab-panel" style="display:none;">
   <div style="padding:1.2rem;max-width:650px;">
     <h3>📥 Data Import</h3>
-    <p style="color:#555;font-size:.9rem;">Import from your Easy Invoicing Access database export. Accept XML or CSV. Processes in chunks of 500 records.</p>
+    <p style="color:#555;font-size:.9rem;">Import from your Easy Invoicing Access database export. Accept XML or CSV. Processes in chunks of 10,000 records.</p>
 
     <!-- Products -->
     <div class="stat-card" style="margin-bottom:1rem;">
@@ -499,7 +499,9 @@ async function startImport(type) {
   const bar         = document.getElementById(type + 'Bar');
   const msg         = document.getElementById(type + 'Msg');
   progressDiv.style.display = '';
+  bar.style.background = '#1a3a2a';
   bar.style.width = '0%';
+  msg.style.color = '#333';
   msg.textContent = 'Uploading…';
 
   const endpoints = {
@@ -517,12 +519,17 @@ async function startImport(type) {
   if (type === 'invoices') storeCode = document.getElementById('invoicesStore').value;
 
   const file = fileInput.files[0];
+  let totalInserted = 0;
+  let totalSkipped  = 0;
+  let startTime     = null;
 
   const sendChunk = async () => {
+    if (startTime === null) startTime = Date.now();
+
     const fd = new FormData();
     fd.append('offset', offset);
     if (offset === 0) fd.append('file', file);
-    if (storeId) fd.append('store_id', storeId);
+    if (storeId)   fd.append('store_id',   storeId);
     if (storeCode) fd.append('store_code', storeCode);
 
     const res = await fetch(endpoint, {
@@ -533,28 +540,52 @@ async function startImport(type) {
     const data = await res.json();
 
     if (!data.success) {
-      msg.textContent = '❌ ' + (data.error || 'Import failed');
+      bar.style.background = '#dc3545';
       msg.style.color = '#dc3545';
+      msg.textContent = '❌ Error on record ' + (offset + 1) + ': ' + (data.error || 'Import failed');
       return;
     }
 
-    bar.style.width = data.percentage + '%';
-    msg.textContent = data.message;
+    totalInserted += data.inserted || 0;
+    totalSkipped  += data.skipped  || 0;
+
+    const pct      = data.percentage || 0;
+    const elapsed  = (Date.now() - startTime) / 1000;
+    const processed = data.processed || 0;
+    const total     = data.total || 0;
+
+    bar.style.width = pct + '%';
+
+    if (!data.done && processed > 0 && elapsed > 0) {
+      const rate       = processed / elapsed;            // records/sec
+      const remaining  = total - processed;
+      const etaSec     = rate > 0 ? Math.ceil(remaining / rate) : 0;
+      const etaStr     = etaSec >= 60
+        ? Math.ceil(etaSec / 60) + ' min remaining'
+        : etaSec + 's remaining';
+      msg.textContent = `Importing record ${processed.toLocaleString()} of ${total.toLocaleString()}… ${pct}% — ${etaStr}`;
+    } else {
+      msg.textContent = data.message || `Processing… ${processed}/${total} (${pct}%)`;
+    }
 
     if (!data.done) {
       offset = data.processed;
       await sendChunk();
     } else {
       bar.style.width = '100%';
-      toast(data.message);
+      bar.style.background = '#28a745';
+      msg.style.color = '#155724';
+      msg.textContent = `✅ Import complete! ${totalInserted.toLocaleString()} records imported, ${totalSkipped.toLocaleString()} skipped (duplicates)`;
+      toast(`Import complete: ${totalInserted} imported, ${totalSkipped} skipped`);
     }
   };
 
   try {
     await sendChunk();
   } catch (e) {
-    msg.textContent = '❌ Network error: ' + e.message;
+    bar.style.background = '#dc3545';
     msg.style.color = '#dc3545';
+    msg.textContent = '❌ Network error: ' + e.message;
   }
 }
 

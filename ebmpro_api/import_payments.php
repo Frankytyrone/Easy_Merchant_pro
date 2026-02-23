@@ -30,7 +30,7 @@ $pdo = getDb();
 session_start();
 
 $offset    = max(0, (int)($_POST['offset'] ?? 0));
-$chunkSize = 500;
+$chunkSize = 10000;
 
 if ($offset === 0) {
     if (empty($_FILES['file']['tmp_name'])) {
