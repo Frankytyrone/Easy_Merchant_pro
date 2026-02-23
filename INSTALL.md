@@ -1,317 +1,201 @@
-# Easy Builders Merchant Pro — VPS Installation Guide
+# Easy Builders Merchant Pro — Installation Guide
 
-## Requirements
-- VPS running Ubuntu 22.04 LTS (recommended: Hostinger VPS — KVM 2 plan or above)
-- PHP 8.1+ with extensions: pdo_mysql, mbstring, zip, json, curl, xml
-- MySQL 8.0+ (or MariaDB 10.6+)
-- Apache 2.4+ or Nginx
-- At least 2 GB RAM, 20 GB SSD
+## Option A: Local Testing on XAMPP (your PC)
 
----
-
-## Step 1 — Sign Up to Hostinger VPS
-
-1. Go to [hostinger.com/vps-hosting](https://www.hostinger.com/vps-hosting)
-2. Choose the **KVM 2** plan (4 vCPU, 8 GB RAM, 100 GB NVMe SSD) — handles 130,000+ products comfortably
-3. Select **Ubuntu 22.04** as the operating system
-4. Choose a datacenter in **Europe** (Frankfurt or Amsterdam for lowest latency to Ireland)
-5. Complete checkout and note your VPS IP address and root password from hPanel
+1. Download XAMPP from [apachefriends.org](https://www.apachefriends.org)
+2. Copy `ebmpro/` folder to `C:\xampp\htdocs\ebmpro\`
+3. Copy `ebmpro_api/` folder to `C:\xampp\htdocs\ebmpro_api\`
+4. Open phpMyAdmin at `http://localhost/phpmyadmin`
+5. Create database called `ebmpro_local`
+6. Import `install/schema.sql`
+7. Import `database/seed_dummy_data.sql` for test data
+8. Open `http://localhost/ebmpro/` in browser
+9. Login: username `admin` password `admin123`
 
 ---
 
-## Step 2 — Log Into Your VPS
+## Option B: Live Deployment on FastComet (app.shanemcgee.biz)
 
-Open hPanel → **VPS** → your server → **Terminal** (browser-based SSH), or use:
+> **Important:** The existing website at `https://shanemcgee.biz/` must NOT be touched.
+> The app lives on the subdomain `app.shanemcgee.biz` only.
 
-```bash
-ssh root@YOUR_VPS_IP
+### Step 1 — Create the subdomain
+
+- Log into FastComet cPanel at your hosting URL
+- Click **Subdomains** (under Domains section)
+- Subdomain field: type `app`
+- Domain: select `shanemcgee.biz`
+- Document Root: will auto-fill as `public_html/app` — leave it as is
+- Click **Create**
+- Wait 5 minutes for DNS to propagate
+
+### Step 2 — Enable free SSL
+
+- In cPanel click **Let's Encrypt SSL** (or AutoSSL)
+- Find `app.shanemcgee.biz` in the list
+- Click **Issue** or **Run AutoSSL**
+- Done — your app will be on HTTPS ✅
+
+### Step 3 — Upload the files
+
+- In cPanel click **File Manager**
+- Navigate to `public_html/app/`
+- Click **Upload** button
+- Upload the entire `ebmpro/` folder contents INTO `public_html/app/`
+  (so `public_html/app/index.html` exists)
+- Go back to `public_html/`
+- Create a new folder called `ebmpro_api`
+- Upload the entire `ebmpro_api/` folder contents INTO `public_html/ebmpro_api/`
+
+The folder structure on the server should be:
+
+```
+public_html/
+├── app/              ← ebmpro frontend files go here
+│   ├── index.html
+│   ├── css/
+│   ├── js/
+│   └── ...
+├── ebmpro_api/       ← API files go here
+│   ├── common.php
+│   ├── auth.php
+│   └── ...
+└── (your existing website files — untouched!)
 ```
 
----
+### Step 4 — Create the database
 
-## Step 3 — Create a Subdomain
+- In cPanel click **MySQL Databases**
+- Under "Create New Database" type: `ebmpro` → click **Create Database**
+- Under "Create New User" type a username (e.g. `ebmpro_user`) and a strong password → click **Create User**
+- Under "Add User to Database" select your new user and database → click **Add** → tick **All Privileges** → click **Make Changes**
+- Write down: database name, username, password — you need them next!
 
-In hPanel → **Domains** → your domain → **DNS Zone**:
+> **Note:** FastComet prefixes database names and usernames with your cPanel username,
+> e.g. `youraccount_ebmpro` and `youraccount_ebmpro_user`.
+> Use the FULL name including prefix.
 
-1. Add an **A record**:
-   - Name: `ebmpro`
-   - Points to: `YOUR_VPS_IP`
-   - TTL: 3600
+### Step 5 — Import the database
 
-This creates `ebmpro.easybuildersdonegal.ie` (replace with your actual domain).
+- In cPanel click **phpMyAdmin**
+- Click your new database in the left panel
+- Click **Import** tab at the top
+- Click **Choose File** → select `install/schema.sql` from your PC
+- Click **Go**
+- You should see "Import has been successfully finished"
+- Optional: repeat with `database/seed_dummy_data.sql` to load test data
 
----
+### Step 6 — Update the config file
 
-## Step 4 — Run the Setup Script
+- In File Manager go to `public_html/ebmpro_api/`
+- Find `config.php` and click **Edit**
+- Change these lines to match YOUR database details from Step 4:
 
-Upload `setup.sh` to your VPS and run it:
-
-```bash
-# Upload via SFTP or paste the contents directly
-chmod +x setup.sh
-sudo bash setup.sh
-```
-
-The script will:
-- Install Apache, PHP 8.1, and MySQL
-- Install required PHP extensions
-- Create the web directory
-- Set file permissions
-- Create the backups directory
-- Output a health check
-
----
-
-## Step 5 — Upload the Application Files
-
-**Option A: File Manager (easiest)**
-1. Log into hPanel → File Manager
-2. Navigate to `/var/www/ebmpro/`
-3. Upload the project ZIP file
-4. Right-click → Extract
-
-**Option B: SFTP**
-Use FileZilla or Cyberduck:
-- Host: `YOUR_VPS_IP`
-- Username: `root`
-- Password: your VPS password
-- Upload all files to `/var/www/ebmpro/`
-
-**Option C: Git (recommended)**
-```bash
-cd /var/www
-git clone https://github.com/YOUR_REPO/Easy_Merchant_pro.git ebmpro
-```
-
----
-
-## Step 6 — Create the MySQL Database
-
-```bash
-mysql -u root -p
-```
-
-Run these SQL commands:
-
-```sql
-CREATE DATABASE ebmpro_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER 'ebmpro_user'@'localhost' IDENTIFIED BY 'CHOOSE_A_STRONG_PASSWORD';
-GRANT ALL PRIVILEGES ON ebmpro_db.* TO 'ebmpro_user'@'localhost';
-FLUSH PRIVILEGES;
-EXIT;
-```
-
----
-
-## Step 7 — Import the Database Schema
-
-```bash
-mysql -u ebmpro_user -p ebmpro_db < /var/www/ebmpro/install/schema.sql
-mysql -u ebmpro_user -p ebmpro_db < /var/www/ebmpro/install/schema_additions.sql
-```
-
-**Optional: Load test/dummy data**
-```bash
-mysql -u ebmpro_user -p ebmpro_db < /var/www/ebmpro/database/seed_dummy_data.sql
-```
-
----
-
-## Step 8 — Edit config.php
-
-```bash
-nano /var/www/ebmpro/ebmpro_api/config.php
-```
-
-Update these lines:
 ```php
-define('SITE_URL',  'https://ebmpro.easybuildersdonegal.ie');
-define('DB_NAME',   'ebmpro_db');
-define('DB_USER',   'ebmpro_user');
-define('DB_PASS',   'YOUR_STRONG_PASSWORD');
+define('DB_HOST', 'localhost');
+define('DB_NAME', 'youraccount_ebmpro');      // ← your full database name
+define('DB_USER', 'youraccount_ebmpro_user'); // ← your full username
+define('DB_PASS', 'yourpassword');            // ← your password
+define('DB_CHARSET', 'utf8mb4');
 ```
 
-Save with `Ctrl+O`, exit with `Ctrl+X`.
+- Also update the app URL:
+
+```php
+define('APP_ENV', 'production');
+define('APP_URL', 'https://app.shanemcgee.biz');
+define('API_URL', 'https://app.shanemcgee.biz/ebmpro_api');
+```
+
+- Click **Save**
+
+### Step 7 — Update the frontend API path
+
+- In File Manager go to `public_html/app/js/`
+- Find `app.js` and click **Edit**
+- The API calls already use the relative path `/ebmpro_api/` — no changes needed ✅
+- This relative path works on both localhost AND the live server automatically
+
+### Step 8 — Set file permissions
+
+- In File Manager, right-click the `ebmpro_api/` folder → **Change Permissions**
+- Set to `755`
+- Right-click `ebmpro_api/config.php` → **Change Permissions** → set to `644`
+
+### Step 9 — Test it!
+
+- Open `https://app.shanemcgee.biz` in your browser
+- You should see the EBM Pro login screen
+- Login with: username `admin` password `admin123`
+- **Change the admin password immediately after first login!**
+
+### Step 10 — Set up automatic backups (important!)
+
+- In cPanel click **Cron Jobs**
+- Add a new cron job:
+  - Minute: `0`
+  - Hour: `2`
+  - Day/Month/Weekday: `*`
+  - Command: `php /home/youraccount/public_html/ebmpro_api/backup.php`
+- This runs a backup every night at 2am automatically ✅
 
 ---
 
-## Step 9 — Configure Apache Virtual Host
+## PHP Settings for Large Imports (13,000+ products)
 
-```bash
-nano /etc/apache2/sites-available/ebmpro.conf
-```
+The `.htaccess` files already handle this automatically on FastComet.
 
-Paste this configuration:
+If you still get timeout errors during import, do this in cPanel:
 
-```apache
-<VirtualHost *:80>
-    ServerName ebmpro.easybuildersdonegal.ie
-    DocumentRoot /var/www/ebmpro
-    DirectoryIndex ebmpro/index.html
+- Click **Select PHP Version** (or MultiPHP Manager)
+- Click **PHP Options** tab
+- Set these values:
+  - `max_execution_time` = 300
+  - `max_input_time` = 300
+  - `memory_limit` = 512M
+  - `upload_max_filesize` = 128M
+  - `post_max_size` = 128M
+- Click **Save**
 
-    <Directory /var/www/ebmpro>
-        AllowOverride All
-        Options -Indexes +FollowSymLinks
-        Require all granted
-    </Directory>
-
-    ErrorLog  /var/log/apache2/ebmpro_error.log
-    CustomLog /var/log/apache2/ebmpro_access.log combined
-</VirtualHost>
-```
-
-Enable the site:
-
-```bash
-a2ensite ebmpro.conf
-a2enmod rewrite
-systemctl reload apache2
-```
+For XAMPP on your PC, open `C:\xampp\php\php.ini` in Notepad and change the same values, then restart Apache.
 
 ---
 
-## Step 10 — Set Up HTTPS (Free SSL via Let's Encrypt)
+## Updating the System
 
-```bash
-apt install -y certbot python3-certbot-apache
-certbot --apache -d ebmpro.easybuildersdonegal.ie
-```
+When new features or fixes are added to GitHub:
 
-Follow the prompts. Certbot auto-renews the certificate every 90 days.
+**On XAMPP:**
+1. Download the latest ZIP from GitHub
+2. Extract and copy files to `C:\xampp\htdocs\`
+3. Refresh browser with Ctrl+Shift+R
 
----
-
-## Step 11 — Set Up Cron Jobs
-
-```bash
-crontab -e
-```
-
-Add these lines:
-
-```cron
-# Nightly backup at midnight — uses curl with admin token
-# Replace TOKEN with a long-lived admin token generated from the auth API
-# 0 0 * * * curl -s -H "Authorization: Bearer TOKEN" https://ebmpro.easybuildersdonegal.ie/ebmpro_api/admin.php?action=run_backup > /dev/null 2>&1
-
-# Payment reminders — every hour
-0 * * * * php /var/www/ebmpro/cron/send_reminders.php >> /var/log/ebmpro_reminders.log 2>&1
-```
-
-> **Note on backup cron:** The backup endpoint requires a valid Bearer token. Generate a long-lived admin token by logging in via the API, then use it in the curl command above. Alternatively, copy the backup script logic into a standalone CLI PHP file that reads the config directly without HTTP auth.
+**On FastComet:**
+1. Download the latest ZIP from GitHub
+2. In cPanel File Manager, upload and overwrite the changed files
+3. Never overwrite `config.php` — that has your database details!
 
 ---
 
-## Step 12 — Test the Installation
-
-1. Open `https://ebmpro.easybuildersdonegal.ie/install/`
-2. Follow the 5-step installer
-3. Log in at `https://ebmpro.easybuildersdonegal.ie/ebmpro/` with:
-   - Username: `admin`
-   - Password: `Easy2026!`
-4. **Change your password immediately** (Settings → Change Password)
-
----
-
-## Step 13 — Set Up Both Stores
-
-1. Log in as admin
-2. Go to **Settings** → Stores
-3. Edit **Falcarragh (FAL)** — enter address, phone, VAT number
-4. Edit **Gweedore (GWE)** — enter address, phone, VAT number
-5. Set up separate operator accounts for each store if needed
-
----
-
-## Step 14 — Import Your Product Data
-
-1. Export your Access database tables as XML or CSV
-2. Log in as admin → **Admin Dashboard** (`/ebmpro/admin.html`)
-3. Click the **Import** tab
-4. Import in order:
-   1. Products (largest file — takes several minutes for 130,000+ records)
-   2. Customers
-   3. Invoices
-   4. Payments
-5. Each import shows a progress bar — do not close the tab while running
-
----
-
-## Stripe Setup (Optional)
-
-1. Create a Stripe account at [stripe.com](https://stripe.com)
-2. Go to Developers → API Keys
-3. Copy your **Publishable key** and **Secret key**
-4. In EBM Pro: Settings → Payment Settings → enter both keys
-5. In Stripe Dashboard → Developers → Webhooks → Add endpoint:
-   - URL: `https://ebmpro.easybuildersdonegal.ie/ebmpro_api/stripe_webhook.php`
-   - Events: `checkout.session.completed`, `payment_link.completed`
-6. Copy the webhook signing secret into Settings → Stripe Webhook Secret
-
----
-
-## File Permissions Reference
-
-```bash
-# Web files (readable by Apache)
-find /var/www/ebmpro -type f -exec chmod 644 {} \;
-find /var/www/ebmpro -type d -exec chmod 755 {} \;
-
-# Writable by PHP
-chmod 750 /var/www/ebmpro/backups
-chown www-data:www-data /var/www/ebmpro/backups
-
-# Protect config
-chmod 640 /var/www/ebmpro/ebmpro_api/config.php
-chown www-data:www-data /var/www/ebmpro/ebmpro_api/config.php
-```
-
----
-
-## PHP Configuration for Large Imports
-
-For importing large product/customer files (65,000+ records),
-update these values in `C:\xampp\php\php.ini` (Windows/XAMPP) or
-`/etc/php/8.1/apache2/php.ini` (Linux):
-
-```ini
-max_execution_time = 300
-max_input_time = 300
-memory_limit = 512M
-upload_max_filesize = 128M
-post_max_size = 128M
-```
-
-After changing, restart Apache in XAMPP Control Panel (Windows) or run:
-```bash
-systemctl reload apache2
-```
-
-> **Note:** On a VPS/Linux server using Apache, these limits are set
-> automatically via the `.htaccess` files included in `ebmpro/` and
-> `ebmpro_api/`. No manual php.ini changes are needed on VPS deployments.
-
----
-
-## Troubleshooting
+## Troubleshooting common problems
 
 | Problem | Solution |
-|---------|----------|
-| Blank page / 500 error | Check `tail -50 /var/log/apache2/ebmpro_error.log` |
-| Database connection fails | Verify DB_HOST, DB_NAME, DB_USER, DB_PASS in config.php |
-| Import times out | Increase `max_execution_time = 300` in `/etc/php/8.1/apache2/php.ini` |
-| File upload fails | Increase `upload_max_filesize = 64M` and `post_max_size = 64M` in php.ini |
-| CORS errors in browser | Ensure SITE_URL in config.php matches exactly (with https://) |
-| SSL certificate fails | Make sure DNS has propagated first — wait 24h after adding A record |
+|---|---|
+| White screen / blank page | Check `ebmpro_api/config.php` database details |
+| "Service unavailable" error | Database connection failed — check DB name/user/pass |
+| Can't log in | Run the password reset SQL in phpMyAdmin |
+| Products not saving | Check browser F12 console for red errors |
+| Import times out | Increase PHP limits in cPanel PHP Options |
+| SSL not working | Wait 24 hours or click Run AutoSSL again in cPanel |
+| Existing website broken | Check you only uploaded to `public_html/app/` and `public_html/ebmpro_api/` |
 
----
+### Password Reset (if locked out)
 
-## Security Checklist
+Run this in phpMyAdmin:
 
-- [ ] Changed admin password from `Easy2026!`
-- [ ] Set strong MySQL password
-- [ ] Enabled HTTPS
-- [ ] `config.php` has permissions 640 (not world-readable)
-- [ ] `/install/` directory returns "Already installed" (not the setup wizard)
-- [ ] Backups are running (check `/var/www/ebmpro/backups/`)
-- [ ] Keep PHP and MySQL updated: `apt update && apt upgrade`
+```sql
+UPDATE users SET password_hash = '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi'
+WHERE username = 'admin';
+```
+
+This resets admin password to `password` — change it immediately after!

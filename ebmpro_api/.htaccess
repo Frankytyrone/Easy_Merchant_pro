@@ -1,5 +1,17 @@
+Options -Indexes
 php_value max_execution_time 300
 php_value max_input_time 300
 php_value memory_limit 512M
 php_value upload_max_filesize 128M
 php_value post_max_size 128M
+
+# Security headers
+Header always set X-Content-Type-Options nosniff
+Header always set X-Frame-Options DENY
+
+# CORS for both localhost and live domain
+SetEnvIf Origin "^(https?://localhost|https://app\.shanemcgee\.biz)$" ORIGIN_OK=$0
+Header always set Access-Control-Allow-Origin "%{ORIGIN_OK}e" env=ORIGIN_OK
+Header always set Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
+Header always set Access-Control-Allow-Headers "Content-Type, Authorization, X-Auth-Token"
+Header always set Access-Control-Allow-Credentials "true"
