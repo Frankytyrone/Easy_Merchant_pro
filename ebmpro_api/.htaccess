@@ -1,4 +1,9 @@
 Options -Indexes
+
+# Pass Authorization header through on XAMPP/Windows (Apache strips it by default)
+RewriteEngine On
+RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
 php_value max_execution_time 300
 php_value max_input_time 300
 php_value memory_limit 512M

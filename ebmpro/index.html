@@ -599,6 +599,38 @@
       </div>
     </div>
 
+    <!-- Data Import -->
+    <div class="card settings-section">
+      <h3 class="mb-3">📥 Import Data from Easy Invoicing</h3>
+      <p class="text-muted mb-3">Export your data from Easy Invoicing as CSV files, then upload here. Existing records will be skipped automatically.</p>
+
+      <div class="form-row col-3">
+        <div class="form-group">
+          <label class="form-label">Import Customers CSV</label>
+          <input type="file" id="importCustomersFile" accept=".csv" class="form-control" aria-label="Customers CSV file">
+          <button class="btn btn-light mt-1 w-full" onclick="Import.run('customers')">⬆️ Import Customers</button>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Import Products CSV</label>
+          <input type="file" id="importProductsFile" accept=".csv" class="form-control" aria-label="Products CSV file">
+          <button class="btn btn-light mt-1 w-full" onclick="Import.run('products')">⬆️ Import Products</button>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Import Invoices CSV</label>
+          <input type="file" id="importInvoicesFile" accept=".csv" class="form-control" aria-label="Invoices CSV file">
+          <button class="btn btn-light mt-1 w-full" onclick="Import.run('invoices')">⬆️ Import Invoices</button>
+        </div>
+      </div>
+
+      <div id="importProgressWrap" class="hidden mt-2">
+        <div class="progress-bar-wrap" style="background:#e9ecef;border-radius:4px;height:8px;overflow:hidden">
+          <div id="importProgressBar" style="height:100%;width:0%;background:#1a3a5c;transition:width .3s"></div>
+        </div>
+        <p id="importProgressLabel" class="text-muted mt-1" style="font-size:.85rem"></p>
+      </div>
+      <div id="importResult" class="hidden mt-2"></div>
+    </div>
+
     <!-- Payment Gateway Settings -->
     <div class="card settings-section">
       <h3 class="mb-3">💳 Payment Gateway</h3>
@@ -912,6 +944,7 @@
 <script src="/ebmpro/js/product.js"></script>
 <script src="/ebmpro/js/invoice.js"></script>
 <script src="/ebmpro/js/pdf.js"></script>
+<script src="/ebmpro/js/import.js"></script>
 <script src="/ebmpro/js/app.js"></script>
 
 <script>
