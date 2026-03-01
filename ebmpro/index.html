@@ -612,7 +612,6 @@
       <div class="btn-row">
         <button class="btn btn-light" onclick="App.showAuditLog()">📋 View Audit Log</button>
         <button class="btn btn-light" onclick="triggerBackup()">💾 Download Backup</button>
-        <a href="/ebmpro/admin.html" class="btn btn-accent" target="_blank">🛡️ Admin Dashboard</a>
         <a href="/ebmpro/help.html" class="btn btn-light" target="_blank">❓ Operator Manual</a>
       </div>
 
@@ -810,6 +809,24 @@
           </thead>
           <tbody id="adminUsersTbody">
             <tr><td colspan="5" class="text-center text-muted">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Backup Files -->
+    <div class="card mt-3">
+      <div class="flex justify-between items-center mb-3">
+        <h3>💾 Saved Backups</h3>
+        <button class="btn btn-light btn-sm" onclick="App.loadAdminBackupList()">🔄 Refresh</button>
+      </div>
+      <div class="table-wrap">
+        <table class="data-table" aria-label="Backup files">
+          <thead>
+            <tr><th>Filename</th><th>Size</th><th>Created</th><th></th></tr>
+          </thead>
+          <tbody id="adminBackupsTbody">
+            <tr><td colspan="4" class="text-center text-muted">Loading…</td></tr>
           </tbody>
         </table>
       </div>

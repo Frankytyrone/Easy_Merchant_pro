@@ -764,6 +764,8 @@ const App = (() => {
 
       // Load operators
       await loadOperators();
+      // Load backup list
+      loadAdminBackupList();
     } catch {
       showToast('Failed to load admin dashboard.', 'danger');
     }
@@ -774,16 +776,66 @@ const App = (() => {
     const btn = document.querySelector('[onclick="App.runAdminBackup()"]');
     if (btn) { btn.disabled = true; btn.innerHTML = '⏳ Backing up…'; }
     try {
-      const resp = await fetch('/ebmpro_api/admin.php?action=run_backup', {
+      const resp = await fetch('/ebmpro_api/backup.php?action=create', {
         method: 'POST',
         headers: Auth.getAuthHeaders(),
       });
       const data = await resp.json();
-      showToast(data.success ? `✅ Backup created: ${data.filename}` : '❌ Backup failed.', data.success ? 'success' : 'danger');
+      if (data.success) {
+        showToast(`✅ Backup created: ${data.filename}`, 'success');
+        loadAdminBackupList();
+      } else {
+        showToast(`❌ Backup failed: ${data.error || 'Unknown error'}`, 'danger');
+      }
     } catch {
       showToast('❌ Backup failed.', 'danger');
     } finally {
       if (btn) { btn.disabled = false; btn.innerHTML = '💾 Run Backup Now'; }
+    }
+  }
+
+  /* ── Admin: list backup files ──────────────────────────────── */
+  async function loadAdminBackupList() {
+    const tbody = document.getElementById('adminBackupsTbody');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="4" class="text-center"><span class="spinner"></span></td></tr>';
+    try {
+      const resp = await fetch('/ebmpro_api/backup.php?action=list', { headers: Auth.getAuthHeaders() });
+      const data = await resp.json();
+      const list = data.data || [];
+      if (!list.length) {
+        tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">No backups found. Click "Run Backup Now" to create one.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = list.map(b => `
+        <tr>
+          <td>${escHtml(b.filename)}</td>
+          <td>${escHtml(b.size)}</td>
+          <td>${escHtml(b.created)}</td>
+          <td style="white-space:nowrap">
+            <a href="/ebmpro_api/backup.php?action=download&file=${encodeURIComponent(b.filename)}" class="btn btn-sm btn-light">⬇️ Download</a>
+            <button class="btn btn-sm btn-light" onclick="App.deleteBackup('${escHtml(b.filename)}')">🗑️ Delete</button>
+          </td>
+        </tr>
+      `).join('');
+    } catch {
+      tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">Failed to load backups.</td></tr>';
+    }
+  }
+
+  /* ── Admin: delete backup file ─────────────────────────────── */
+  async function deleteBackup(filename) {
+    if (!confirm(`Delete backup: ${filename}?`)) return;
+    try {
+      const resp = await fetch(`/ebmpro_api/backup.php?action=delete&file=${encodeURIComponent(filename)}`, {
+        method: 'POST',
+        headers: Auth.getAuthHeaders(),
+      });
+      const data = await resp.json();
+      if (data.success) { showToast('Backup deleted.', 'success'); loadAdminBackupList(); }
+      else showToast(data.error || 'Delete failed.', 'danger');
+    } catch {
+      showToast('Delete failed.', 'danger');
     }
   }
 
@@ -1374,6 +1426,8 @@ const App = (() => {
     sendSelectedReminders,
     loadAdminDashboard,
     runAdminBackup,
+    loadAdminBackupList,
+    deleteBackup,
     loadOperators,
     openAddUserModal,
     openEditUserModal,

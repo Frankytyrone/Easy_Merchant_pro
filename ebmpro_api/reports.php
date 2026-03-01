@@ -191,8 +191,9 @@ function handleSalesByProduct(PDO $pdo, array $auth): void
            AND i.status NOT IN ('cancelled','draft')
          GROUP BY ii.product_code, ii.description
          ORDER BY total_revenue DESC
-         LIMIT $limit"
+         LIMIT ?"
     );
+    $rangeArgs[] = $limit;
     $stmt->execute($rangeArgs);
     $rows = $stmt->fetchAll();
 
@@ -240,8 +241,9 @@ function handleSalesByCustomer(PDO $pdo, array $auth): void
            AND i.status NOT IN ('cancelled','draft')
          GROUP BY c.id, customer_name, c.email_address
          ORDER BY total_revenue DESC
-         LIMIT $limit"
+         LIMIT ?"
     );
+    $rangeArgs[] = $limit;
     $stmt->execute($rangeArgs);
     $rows = $stmt->fetchAll();
 

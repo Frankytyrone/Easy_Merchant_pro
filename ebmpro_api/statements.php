@@ -130,8 +130,19 @@ if ($method === 'POST') {
         $stmt->execute($params);
         $invoices = $stmt->fetchAll();
 
+        // Calculate opening balance (sum of outstanding balances before date_from)
+        $openingBalance = 0.0;
+        if ($dateFrom) {
+            $obStmt = $pdo->prepare(
+                "SELECT COALESCE(SUM(balance), 0) FROM invoices
+                 WHERE customer_id = ? AND status != 'cancelled' AND invoice_date < ?"
+            );
+            $obStmt->execute([$customerId, $dateFrom]);
+            $openingBalance = round((float)$obStmt->fetchColumn(), 2);
+        }
+
         // Calculate running balance
-        $runningBalance = 0.0;
+        $runningBalance = $openingBalance;
         foreach ($invoices as &$inv) {
             $runningBalance        += (float)$inv['balance'];
             $inv['running_balance'] = round($runningBalance, 2);
