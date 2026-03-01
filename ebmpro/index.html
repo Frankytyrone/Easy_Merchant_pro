@@ -71,6 +71,15 @@
     <button data-screen="reportsScreen" onclick="App.showScreen('reportsScreen')">
       <span class="icon">📊</span> Reports
     </button>
+    <button data-screen="quotesScreen" onclick="App.showScreen('quotesScreen')">
+      <span class="icon">📋</span> Quotes
+    </button>
+    <button data-screen="expensesScreen" class="admin-only" onclick="App.showScreen('expensesScreen')">
+      <span class="icon">💸</span> Expenses
+    </button>
+    <button data-screen="recurringScreen" class="admin-only" onclick="App.showScreen('recurringScreen')">
+      <span class="icon">🔁</span> Recurring
+    </button>
     <button data-screen="stockScreen" class="admin-only" onclick="App.showScreen('stockScreen')">
       <span class="icon">📦</span> Stock
     </button>
@@ -657,6 +666,24 @@
         </div>
       </div>
 
+          <div class="form-group mt-3" style="grid-column:1/-1">
+            <label class="form-label">XML Import (Products / Customers)</label>
+            <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
+              <select id="xmlImportType" class="form-control" style="width:auto" aria-label="XML import type">
+                <option value="products">Products</option>
+                <option value="customers">Customers</option>
+              </select>
+              <input type="file" id="xmlImportFile" accept=".xml" class="form-control" style="width:auto" aria-label="XML file">
+              <button class="btn btn-light" onclick="Import.runXml()">⬆️ Import XML</button>
+            </div>
+            <div class="mt-1" style="font-size:.85rem;color:#9e9e9e">
+              Sample XML:
+              <a href="#" onclick="Import.downloadSampleXml('products'); return false;" style="color:#4caf50">Products XML</a>
+              &nbsp;|&nbsp;
+              <a href="#" onclick="Import.downloadSampleXml('customers'); return false;" style="color:#4caf50">Customers XML</a>
+            </div>
+          </div>
+
       <div id="importProgressWrap" class="hidden mt-2">
         <div class="progress-bar-wrap" style="background:#e9ecef;border-radius:4px;height:8px;overflow:hidden">
           <div id="importProgressBar" style="height:100%;width:0%;background:#1a3a5c;transition:width .3s"></div>
@@ -734,6 +761,121 @@
     </div>
   </section>
   <!-- /stockScreen -->
+
+  <!-- ──────────────────────────────────────────────────────────
+       SCREEN: Quotes
+  ─────────────────────────────────────────────────────────── -->
+  <section id="quotesScreen" class="screen" aria-label="Quotes">
+    <div class="flex justify-between items-center mb-3">
+      <h2>📋 Quotes / Estimates</h2>
+      <button class="btn btn-primary btn-sm" onclick="App.openQuoteModal()">➕ New Quote</button>
+    </div>
+    <div class="table-wrap">
+      <table class="data-table" aria-label="Quotes list" id="quotesTable">
+        <thead>
+          <tr>
+            <th>Quote No.</th>
+            <th>Customer</th>
+            <th>Date</th>
+            <th>Expiry</th>
+            <th class="text-right">Total</th>
+            <th>Status</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="quotesTbody">
+          <tr><td colspan="7" class="text-center text-muted">Select Quotes from the menu to load.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+  <!-- /quotesScreen -->
+
+  <!-- ──────────────────────────────────────────────────────────
+       SCREEN: Recurring Invoices
+  ─────────────────────────────────────────────────────────── -->
+  <section id="recurringScreen" class="screen admin-only" aria-label="Recurring Invoices">
+    <div class="flex justify-between items-center mb-3">
+      <h2>🔁 Recurring Invoices</h2>
+      <button class="btn btn-primary btn-sm" onclick="App.openRecurringModal()">➕ New Recurring</button>
+    </div>
+    <div class="table-wrap">
+      <table class="data-table" aria-label="Recurring invoices" id="recurringTable">
+        <thead>
+          <tr>
+            <th>Customer</th>
+            <th>Frequency</th>
+            <th>Next Run Date</th>
+            <th>Last Run</th>
+            <th>Status</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="recurringTbody">
+          <tr><td colspan="6" class="text-center text-muted">Select Recurring from the menu to load.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+  <!-- /recurringScreen -->
+
+  <!-- ──────────────────────────────────────────────────────────
+       SCREEN: Expenses
+  ─────────────────────────────────────────────────────────── -->
+  <section id="expensesScreen" class="screen admin-only" aria-label="Expenses">
+    <div class="flex justify-between items-center mb-3">
+      <h2>💸 Expenses</h2>
+      <button class="btn btn-primary btn-sm" onclick="App.openExpenseModal()">➕ Add Expense</button>
+    </div>
+    <div class="filter-bar mb-3" style="display:flex;gap:.75rem;flex-wrap:wrap;align-items:center">
+      <select id="expenseCategoryFilter" class="form-control" style="width:auto" onchange="App.loadExpenses()" aria-label="Filter by category">
+        <option value="">All Categories</option>
+        <option>Materials</option>
+        <option>Fuel</option>
+        <option>Tools</option>
+        <option>Subcontractors</option>
+        <option>Office</option>
+        <option>Telephone</option>
+        <option>Insurance</option>
+        <option>Other</option>
+      </select>
+      <input type="month" id="expenseMonthFilter" class="form-control" style="width:auto" onchange="App.loadExpenses()" aria-label="Filter by month">
+    </div>
+    <div class="stats-grid mb-3" style="grid-template-columns:repeat(3,1fr)">
+      <div class="stat-card">
+        <div class="stat-label">Total Expenses</div>
+        <div class="stat-value" id="expensesTotalValue">€0.00</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Total VAT</div>
+        <div class="stat-value" id="expensesVatValue">€0.00</div>
+      </div>
+      <div class="stat-card success">
+        <div class="stat-label">Total inc. VAT</div>
+        <div class="stat-value" id="expensesGrossValue">€0.00</div>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="data-table" aria-label="Expenses list" id="expensesTable">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Category</th>
+            <th>Description</th>
+            <th>Supplier</th>
+            <th class="text-right">Amount</th>
+            <th class="text-right">VAT</th>
+            <th class="text-right">Total</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="expensesTbody">
+          <tr><td colspan="8" class="text-center text-muted">Select Expenses from the menu to load.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+  <!-- /expensesScreen -->
 
   <!-- ──────────────────────────────────────────────────────────
        SCREEN 8: Admin Dashboard (admin only)
@@ -1303,7 +1445,185 @@
 <!-- ═══════════════════════════════════════════════════════════
      SCRIPTS
 ════════════════════════════════════════════════════════════ -->
-<script src="/ebmpro/js/db.js"></script>
+
+<!-- ── Quote Modal ────────────────────────────────────────── -->
+<div id="quoteModal" class="hidden" role="dialog" aria-modal="true" aria-labelledby="quoteModalTitle">
+  <div class="modal-backdrop">
+    <div class="modal-card" style="max-width:720px">
+      <div class="modal-header">
+        <h3 id="quoteModalTitle">📋 New Quote</h3>
+        <button class="modal-close" onclick="App.closeModal('quoteModal')" aria-label="Close">×</button>
+      </div>
+      <input type="hidden" id="quoteEditId">
+      <div class="form-row col-2">
+        <div class="form-group">
+          <label class="form-label" for="quoteCustomerSearch">Customer *</label>
+          <input type="search" id="quoteCustomerSearch" class="form-control" placeholder="Search customer…" autocomplete="off" aria-label="Customer search">
+          <input type="hidden" id="quoteCustomerId">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="quoteDate">Quote Date *</label>
+          <input type="date" id="quoteDate" class="form-control" aria-label="Quote date">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="quoteExpiryDate">Expiry Date</label>
+          <input type="date" id="quoteExpiryDate" class="form-control" aria-label="Expiry date">
+        </div>
+        <div class="form-group" style="grid-column:1/-1">
+          <label class="form-label" for="quoteNotes">Notes</label>
+          <textarea id="quoteNotes" class="form-control" rows="2" aria-label="Quote notes"></textarea>
+        </div>
+      </div>
+      <h4 style="margin:.75rem 0 .4rem">Line Items</h4>
+      <div class="table-wrap" style="max-height:220px;overflow-y:auto">
+        <table class="data-table" aria-label="Quote items">
+          <thead>
+            <tr>
+              <th>Description</th>
+              <th class="text-right">Qty</th>
+              <th class="text-right">Unit Price</th>
+              <th class="text-right">VAT%</th>
+              <th class="text-right">Total</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="quoteItemsTbody"></tbody>
+        </table>
+      </div>
+      <button class="btn btn-light btn-sm mt-2" onclick="App.addQuoteItem()">➕ Add Line</button>
+      <div class="text-right mt-2" style="font-size:.95rem">
+        <strong>Total: €<span id="quoteTotalDisplay">0.00</span></strong>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-light" onclick="App.closeModal('quoteModal')">Cancel</button>
+        <button class="btn btn-primary" onclick="App.saveQuote()">💾 Save Quote</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Recurring Invoice Modal ────────────────────────────── -->
+<div id="recurringModal" class="hidden" role="dialog" aria-modal="true" aria-labelledby="recurringModalTitle">
+  <div class="modal-backdrop">
+    <div class="modal-card" style="max-width:680px">
+      <div class="modal-header">
+        <h3 id="recurringModalTitle">🔁 New Recurring Invoice</h3>
+        <button class="modal-close" onclick="App.closeModal('recurringModal')" aria-label="Close">×</button>
+      </div>
+      <input type="hidden" id="recurringEditId">
+      <div class="form-row col-2">
+        <div class="form-group">
+          <label class="form-label" for="recurringCustomerSearch">Customer *</label>
+          <input type="search" id="recurringCustomerSearch" class="form-control" placeholder="Search customer…" autocomplete="off" aria-label="Customer search">
+          <input type="hidden" id="recurringCustomerId">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="recurringFrequency">Frequency *</label>
+          <select id="recurringFrequency" class="form-control" aria-label="Frequency">
+            <option value="weekly">Weekly</option>
+            <option value="monthly" selected>Monthly</option>
+            <option value="quarterly">Quarterly</option>
+            <option value="yearly">Yearly</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="recurringStartDate">Start / Next Run Date *</label>
+          <input type="date" id="recurringStartDate" class="form-control" aria-label="Start date">
+        </div>
+        <div class="form-group" style="grid-column:1/-1">
+          <label class="form-label" for="recurringNotes">Notes</label>
+          <textarea id="recurringNotes" class="form-control" rows="2" aria-label="Notes"></textarea>
+        </div>
+      </div>
+      <h4 style="margin:.75rem 0 .4rem">Line Items</h4>
+      <div class="table-wrap" style="max-height:200px;overflow-y:auto">
+        <table class="data-table" aria-label="Recurring items">
+          <thead>
+            <tr>
+              <th>Description</th>
+              <th class="text-right">Qty</th>
+              <th class="text-right">Unit Price</th>
+              <th class="text-right">VAT%</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="recurringItemsTbody"></tbody>
+        </table>
+      </div>
+      <button class="btn btn-light btn-sm mt-2" onclick="App.addRecurringItem()">➕ Add Line</button>
+      <div class="modal-footer">
+        <button class="btn btn-light" onclick="App.closeModal('recurringModal')">Cancel</button>
+        <button class="btn btn-primary" onclick="App.saveRecurring()">💾 Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Expense Modal ──────────────────────────────────────── -->
+<div id="expenseModal" class="hidden" role="dialog" aria-modal="true" aria-labelledby="expenseModalTitle">
+  <div class="modal-backdrop">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 id="expenseModalTitle">💸 Add Expense</h3>
+        <button class="modal-close" onclick="App.closeModal('expenseModal')" aria-label="Close">×</button>
+      </div>
+      <input type="hidden" id="expenseEditId">
+      <div class="form-row col-2">
+        <div class="form-group">
+          <label class="form-label" for="expenseDate">Date *</label>
+          <input type="date" id="expenseDate" class="form-control" aria-label="Expense date">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="expenseCategory">Category *</label>
+          <select id="expenseCategory" class="form-control" aria-label="Category">
+            <option>Materials</option>
+            <option>Fuel</option>
+            <option>Tools</option>
+            <option>Subcontractors</option>
+            <option>Office</option>
+            <option>Telephone</option>
+            <option>Insurance</option>
+            <option>Other</option>
+          </select>
+        </div>
+        <div class="form-group" style="grid-column:1/-1">
+          <label class="form-label" for="expenseDescription">Description *</label>
+          <input type="text" id="expenseDescription" class="form-control" aria-label="Description">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="expenseSupplier">Supplier</label>
+          <input type="text" id="expenseSupplier" class="form-control" aria-label="Supplier">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="expenseReceiptRef">Receipt Ref</label>
+          <input type="text" id="expenseReceiptRef" class="form-control" aria-label="Receipt reference">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="expenseAmount">Amount (ex VAT) € *</label>
+          <input type="number" id="expenseAmount" class="form-control" min="0" step="0.01" oninput="App.calcExpenseVat()" aria-label="Amount">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="expenseVatRate">VAT Rate %</label>
+          <select id="expenseVatRate" class="form-control" oninput="App.calcExpenseVat()" aria-label="VAT rate">
+            <option value="0" selected>0%</option>
+            <option value="9">9%</option>
+            <option value="13.5">13.5%</option>
+            <option value="23">23%</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="expenseVatAmount">VAT Amount €</label>
+          <input type="number" id="expenseVatAmount" class="form-control" min="0" step="0.01" readonly aria-label="VAT amount">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-light" onclick="App.closeModal('expenseModal')">Cancel</button>
+        <button class="btn btn-primary" onclick="App.saveExpense()">💾 Save Expense</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script src="/ebmpro/js/sync.js"></script>
 <script src="/ebmpro/js/auth.js"></script>
 <script src="/ebmpro/js/customer.js"></script>

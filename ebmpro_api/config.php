@@ -28,6 +28,7 @@ define('APP_PATH',  '/ebmpro/');
 define('API_PATH',  '/ebmpro_api/');
 define('TRACK_URL', 'https://shanemcgee.biz/track/open.php');
 define('JWT_SECRET', '69a09b0ef43bcb8970f16b5b915fac3be4c68caa954d3a6a7e2d9ecc71ff719a');
+define('CRON_SECRET', 'change_this_cron_secret_in_production');
 
 try {
     $pdo = new PDO('mysql:host='.DB_HOST.';dbname='.DB_NAME.';charset=utf8mb4', DB_USER, DB_PASS, [

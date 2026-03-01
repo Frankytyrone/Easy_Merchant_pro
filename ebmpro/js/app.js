@@ -36,6 +36,9 @@ const App = (() => {
       case 'settingsScreen': showSettings();         break;
       case 'adminScreen':    loadAdminDashboard();   break;
       case 'stockScreen':    loadStock();            break;
+      case 'quotesScreen':    loadQuotes();     break;
+      case 'recurringScreen': loadRecurring();  break;
+      case 'expensesScreen':  loadExpenses();   break;
     }
   }
 
@@ -1383,6 +1386,429 @@ const App = (() => {
     }
   }
 
+  /* ── Quotes ───────────────────────────────────────────────── */
+  var _quoteItems = [];
+
+  async function loadQuotes() {
+    var store = document.getElementById('storeSelect');
+    var storeId = store ? (store.selectedIndex + 1) : 1;
+    var tbody = document.getElementById('quotesTbody');
+    if (!tbody) return;
+    try {
+      const resp = await fetch('/ebmpro_api/quotes.php?store_id=' + storeId, { headers: Auth.getAuthHeaders() });
+      const res  = await resp.json();
+      if (!res.success || !res.data || res.data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No quotes found.</td></tr>';
+        return;
+      }
+      var statusBadge = function(s) {
+        var colors = { draft:'#9e9e9e', sent:'#2196f3', accepted:'#4caf50', declined:'#f44336', expired:'#ff9800' };
+        return '<span style="background:' + (colors[s]||'#9e9e9e') + ';color:#fff;padding:2px 8px;border-radius:10px;font-size:.8rem">' + s + '</span>';
+      };
+      tbody.innerHTML = res.data.map(function(q) {
+        var actions = '<button class="btn btn-sm btn-light" onclick="App.openQuoteModal(' + parseInt(q.id) + ')">✏️</button> '
+          + (q.status === 'accepted' ? '<button class="btn btn-sm btn-primary" onclick="App.convertQuoteToInvoice(' + parseInt(q.id) + ')">→ Invoice</button> ' : '')
+          + '<button class="btn btn-sm btn-light" onclick="App.sendQuote(' + parseInt(q.id) + ')">📧</button>';
+        return '<tr>'
+          + '<td>' + escHtml(q.quote_number||'') + '</td>'
+          + '<td>' + escHtml(q.customer_name||'') + '</td>'
+          + '<td>' + escHtml(q.quote_date||'') + '</td>'
+          + '<td>' + escHtml(q.expiry_date||'—') + '</td>'
+          + '<td class="text-right">€' + parseFloat(q.total||0).toFixed(2) + '</td>'
+          + '<td>' + statusBadge(q.status) + '</td>'
+          + '<td>' + actions + '</td>'
+          + '</tr>';
+      }).join('');
+    } catch (e) { showToast('Error loading quotes: ' + e.message, 'error'); }
+  }
+
+  async function openQuoteModal(id) {
+    _quoteItems = [];
+    document.getElementById('quoteEditId').value = id || '';
+    document.getElementById('quoteCustomerSearch').value = '';
+    document.getElementById('quoteCustomerId').value = '';
+    document.getElementById('quoteDate').value = new Date().toISOString().slice(0,10);
+    document.getElementById('quoteExpiryDate').value = '';
+    document.getElementById('quoteNotes').value = '';
+    document.getElementById('quoteTotalDisplay').textContent = '0.00';
+    if (id) {
+      try {
+        const resp = await fetch('/ebmpro_api/quotes.php?id=' + parseInt(id), { headers: Auth.getAuthHeaders() });
+        const res  = await resp.json();
+        if (res.success) {
+          var q = res.data;
+          document.getElementById('quoteCustomerSearch').value = q.customer_name || '';
+          document.getElementById('quoteCustomerId').value = q.customer_id || '';
+          document.getElementById('quoteDate').value = q.quote_date || '';
+          document.getElementById('quoteExpiryDate').value = q.expiry_date || '';
+          document.getElementById('quoteNotes').value = q.notes || '';
+          _quoteItems = (q.items || []).map(function(i) {
+            return { description: i.description, qty: i.quantity, unit_price: i.unit_price, vat_rate: i.vat_rate };
+          });
+          document.getElementById('quoteModalTitle').textContent = '📋 Edit Quote ' + escHtml(q.quote_number);
+        }
+      } catch(e) { showToast('Failed to load quote: ' + e.message, 'error'); }
+    } else {
+      document.getElementById('quoteModalTitle').textContent = '📋 New Quote';
+      _quoteItems.push({ description:'', qty:1, unit_price:0, vat_rate:23 });
+    }
+    renderQuoteItems();
+    document.getElementById('quoteModal').classList.remove('hidden');
+  }
+
+  function renderQuoteItems() {
+    var tbody = document.getElementById('quoteItemsTbody');
+    if (!tbody) return;
+    tbody.innerHTML = _quoteItems.map(function(it, idx) {
+      return '<tr>'
+        + '<td><input type="text" class="form-control" value="' + escHtml(it.description||'') + '" onchange="App._quoteItemChange(' + idx + ',\'description\',this.value)" style="min-width:140px"></td>'
+        + '<td><input type="number" class="form-control" value="' + (it.qty||1) + '" min="0.001" step="0.001" oninput="App._quoteItemChange(' + idx + ',\'qty\',this.value)" style="width:70px"></td>'
+        + '<td><input type="number" class="form-control" value="' + (it.unit_price||0) + '" min="0" step="0.01" oninput="App._quoteItemChange(' + idx + ',\'unit_price\',this.value)" style="width:90px"></td>'
+        + '<td><input type="number" class="form-control" value="' + (it.vat_rate||23) + '" min="0" step="0.5" oninput="App._quoteItemChange(' + idx + ',\'vat_rate\',this.value)" style="width:65px"></td>'
+        + '<td class="text-right">€' + (parseFloat(it.qty||1)*parseFloat(it.unit_price||0)*(1+(parseFloat(it.vat_rate||23)/100))).toFixed(2) + '</td>'
+        + '<td><button class="btn btn-sm btn-light" onclick="App._removeQuoteItem(' + idx + ')">🗑️</button></td>'
+        + '</tr>';
+    }).join('');
+    updateQuoteTotal();
+  }
+
+  function addQuoteItem() {
+    _quoteItems.push({ description:'', qty:1, unit_price:0, vat_rate:23 });
+    renderQuoteItems();
+  }
+
+  function _quoteItemChange(idx, field, val) {
+    _quoteItems[idx][field] = val;
+    updateQuoteTotal();
+  }
+
+  function _removeQuoteItem(idx) {
+    _quoteItems.splice(idx, 1);
+    renderQuoteItems();
+  }
+
+  function updateQuoteTotal() {
+    var total = _quoteItems.reduce(function(sum, it) {
+      var net = parseFloat(it.qty||1) * parseFloat(it.unit_price||0);
+      return sum + net + net * parseFloat(it.vat_rate||23) / 100;
+    }, 0);
+    var el = document.getElementById('quoteTotalDisplay');
+    if (el) el.textContent = total.toFixed(2);
+  }
+
+  async function saveQuote() {
+    var custId = document.getElementById('quoteCustomerId').value;
+    var store  = document.getElementById('storeSelect');
+    var storeId = store ? (store.selectedIndex + 1) : 1;
+    if (!custId) { showToast('Please select a customer', 'error'); return; }
+    if (_quoteItems.length === 0) { showToast('Add at least one line item', 'error'); return; }
+    var id = document.getElementById('quoteEditId').value;
+    var payload = {
+      customer_id:  parseInt(custId),
+      store_id:     storeId,
+      quote_date:   document.getElementById('quoteDate').value,
+      expiry_date:  document.getElementById('quoteExpiryDate').value || null,
+      notes:        document.getElementById('quoteNotes').value || null,
+      items:        _quoteItems.map(function(it) {
+        return { description: it.description, qty: parseFloat(it.qty||1), unit_price: parseFloat(it.unit_price||0), vat_rate: parseFloat(it.vat_rate||23) };
+      }),
+    };
+    var url    = id ? '/ebmpro_api/quotes.php?id=' + parseInt(id) : '/ebmpro_api/quotes.php';
+    var method = id ? 'PUT' : 'POST';
+    try {
+      const resp = await fetch(url, {
+        method,
+        headers: Object.assign({ 'Content-Type': 'application/json' }, Auth.getAuthHeaders()),
+        body: JSON.stringify(payload),
+      });
+      const res = await resp.json();
+      if (res.success) {
+        closeModal('quoteModal');
+        showToast('Quote saved successfully', 'success');
+        loadQuotes();
+      } else {
+        showToast('Error: ' + (res.error || 'Unknown error'), 'error');
+      }
+    } catch (e) { showToast('Error: ' + e.message, 'error'); }
+  }
+
+  async function sendQuote(id) {
+    if (!confirm('Send this quote by email to the customer?')) return;
+    try {
+      const resp = await fetch('/ebmpro_api/quotes.php?action=send&id=' + parseInt(id), {
+        method: 'POST',
+        headers: Object.assign({ 'Content-Type': 'application/json' }, Auth.getAuthHeaders()),
+        body: '{}',
+      });
+      const res = await resp.json();
+      showToast(res.success ? 'Quote sent!' : ('Error: ' + res.error), res.success ? 'success' : 'error');
+      if (res.success) loadQuotes();
+    } catch (e) { showToast('Error: ' + e.message, 'error'); }
+  }
+
+  async function convertQuoteToInvoice(id) {
+    if (!confirm('Convert this quote to an invoice?')) return;
+    try {
+      const resp = await fetch('/ebmpro_api/quotes.php?action=convert&id=' + parseInt(id), {
+        method: 'POST',
+        headers: Object.assign({ 'Content-Type': 'application/json' }, Auth.getAuthHeaders()),
+        body: '{}',
+      });
+      const res = await resp.json();
+      if (res.success) {
+        showToast('Invoice ' + res.invoice_number + ' created!', 'success');
+        loadQuotes();
+        showScreen('listScreen');
+      } else {
+        showToast('Error: ' + (res.error || 'Unknown error'), 'error');
+      }
+    } catch (e) { showToast('Error: ' + e.message, 'error'); }
+  }
+
+  /* ── Recurring Invoices ───────────────────────────────────── */
+  var _recurringItems = [];
+
+  async function loadRecurring() {
+    var store = document.getElementById('storeSelect');
+    var storeId = store ? (store.selectedIndex + 1) : 1;
+    var tbody = document.getElementById('recurringTbody');
+    if (!tbody) return;
+    try {
+      const resp = await fetch('/ebmpro_api/recurring.php?store_id=' + storeId, { headers: Auth.getAuthHeaders() });
+      const res  = await resp.json();
+      if (!res.success || !res.data || res.data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No recurring invoices found.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = res.data.map(function(r) {
+        var statusBadge = r.active
+          ? '<span style="background:#4caf50;color:#fff;padding:2px 8px;border-radius:10px;font-size:.8rem">Active</span>'
+          : '<span style="background:#9e9e9e;color:#fff;padding:2px 8px;border-radius:10px;font-size:.8rem">Paused</span>';
+        return '<tr>'
+          + '<td>' + escHtml(r.customer_name||'') + '</td>'
+          + '<td>' + escHtml(r.frequency||'') + '</td>'
+          + '<td>' + escHtml(r.next_run_date||'') + '</td>'
+          + '<td>' + escHtml(r.last_run_date||'—') + '</td>'
+          + '<td>' + statusBadge + '</td>'
+          + '<td>'
+            + '<button class="btn btn-sm btn-light" onclick="App.toggleRecurring(' + parseInt(r.id) + ',' + (r.active?0:1) + ')">' + (r.active?'⏸ Pause':'▶ Resume') + '</button> '
+            + '<button class="btn btn-sm btn-light" onclick="App.deleteRecurring(' + parseInt(r.id) + ')">🗑️</button>'
+          + '</td>'
+          + '</tr>';
+      }).join('');
+    } catch (e) { showToast('Error loading recurring: ' + e.message, 'error'); }
+  }
+
+  function openRecurringModal() {
+    _recurringItems = [];
+    document.getElementById('recurringEditId').value = '';
+    document.getElementById('recurringCustomerSearch').value = '';
+    document.getElementById('recurringCustomerId').value = '';
+    document.getElementById('recurringFrequency').value = 'monthly';
+    document.getElementById('recurringStartDate').value = new Date().toISOString().slice(0,10);
+    document.getElementById('recurringNotes').value = '';
+    _recurringItems.push({ description:'', qty:1, unit_price:0, vat_rate:23 });
+    renderRecurringItems();
+    document.getElementById('recurringModal').classList.remove('hidden');
+  }
+
+  function renderRecurringItems() {
+    var tbody = document.getElementById('recurringItemsTbody');
+    if (!tbody) return;
+    tbody.innerHTML = _recurringItems.map(function(it, idx) {
+      return '<tr>'
+        + '<td><input type="text" class="form-control" value="' + escHtml(it.description||'') + '" onchange="App._recurringItemChange(' + idx + ',\'description\',this.value)"></td>'
+        + '<td><input type="number" class="form-control" value="' + (it.qty||1) + '" min="0.001" step="0.001" oninput="App._recurringItemChange(' + idx + ',\'qty\',this.value)" style="width:70px"></td>'
+        + '<td><input type="number" class="form-control" value="' + (it.unit_price||0) + '" min="0" step="0.01" oninput="App._recurringItemChange(' + idx + ',\'unit_price\',this.value)" style="width:90px"></td>'
+        + '<td><input type="number" class="form-control" value="' + (it.vat_rate||23) + '" min="0" step="0.5" oninput="App._recurringItemChange(' + idx + ',\'vat_rate\',this.value)" style="width:65px"></td>'
+        + '<td><button class="btn btn-sm btn-light" onclick="App._removeRecurringItem(' + idx + ')">🗑️</button></td>'
+        + '</tr>';
+    }).join('');
+  }
+
+  function addRecurringItem() {
+    _recurringItems.push({ description:'', qty:1, unit_price:0, vat_rate:23 });
+    renderRecurringItems();
+  }
+
+  function _recurringItemChange(idx, field, val) {
+    _recurringItems[idx][field] = val;
+  }
+
+  function _removeRecurringItem(idx) {
+    _recurringItems.splice(idx, 1);
+    renderRecurringItems();
+  }
+
+  async function saveRecurring() {
+    var custId = document.getElementById('recurringCustomerId').value;
+    var store  = document.getElementById('storeSelect');
+    var storeId = store ? (store.selectedIndex + 1) : 1;
+    if (!custId) { showToast('Please select a customer', 'error'); return; }
+    if (_recurringItems.length === 0) { showToast('Add at least one line item', 'error'); return; }
+    var payload = {
+      customer_id:   parseInt(custId),
+      store_id:      storeId,
+      frequency:     document.getElementById('recurringFrequency').value,
+      next_run_date: document.getElementById('recurringStartDate').value,
+      notes:         document.getElementById('recurringNotes').value || null,
+      items:         _recurringItems.map(function(it) {
+        return { description: it.description, qty: parseFloat(it.qty||1), unit_price: parseFloat(it.unit_price||0), vat_rate: parseFloat(it.vat_rate||23) };
+      }),
+    };
+    try {
+      const resp = await fetch('/ebmpro_api/recurring.php', {
+        method: 'POST',
+        headers: Object.assign({ 'Content-Type': 'application/json' }, Auth.getAuthHeaders()),
+        body: JSON.stringify(payload),
+      });
+      const res = await resp.json();
+      if (res.success) {
+        closeModal('recurringModal');
+        showToast('Recurring invoice saved', 'success');
+        loadRecurring();
+      } else {
+        showToast('Error: ' + (res.error || 'Unknown error'), 'error');
+      }
+    } catch (e) { showToast('Error: ' + e.message, 'error'); }
+  }
+
+  async function toggleRecurring(id, newActive) {
+    try {
+      const resp = await fetch('/ebmpro_api/recurring.php?id=' + parseInt(id), {
+        method: 'PUT',
+        headers: Object.assign({ 'Content-Type': 'application/json' }, Auth.getAuthHeaders()),
+        body: JSON.stringify({ active: newActive }),
+      });
+      const res = await resp.json();
+      showToast(res.success ? 'Updated' : ('Error: ' + res.error), res.success ? 'success' : 'error');
+      if (res.success) loadRecurring();
+    } catch (e) { showToast('Error: ' + e.message, 'error'); }
+  }
+
+  async function deleteRecurring(id) {
+    if (!confirm('Delete this recurring invoice template?')) return;
+    try {
+      const resp = await fetch('/ebmpro_api/recurring.php?id=' + parseInt(id), {
+        method: 'DELETE',
+        headers: Auth.getAuthHeaders(),
+      });
+      const res = await resp.json();
+      showToast(res.success ? 'Deleted' : ('Error: ' + res.error), res.success ? 'success' : 'error');
+      if (res.success) loadRecurring();
+    } catch (e) { showToast('Error: ' + e.message, 'error'); }
+  }
+
+  /* ── Expenses ─────────────────────────────────────────────── */
+  async function loadExpenses() {
+    var store = document.getElementById('storeSelect');
+    var storeId = store ? (store.selectedIndex + 1) : 1;
+    var category = (document.getElementById('expenseCategoryFilter')||{}).value || '';
+    var month    = (document.getElementById('expenseMonthFilter')||{}).value || '';
+    var url = '/ebmpro_api/expenses.php?store_id=' + storeId;
+    if (category) url += '&category=' + encodeURIComponent(category);
+    if (month)    url += '&from=' + month + '-01&to=' + month + '-31';
+    var tbody = document.getElementById('expensesTbody');
+    if (!tbody) return;
+    try {
+      const resp = await fetch(url, { headers: Auth.getAuthHeaders() });
+      const res  = await resp.json();
+      if (!res.success || !res.data || res.data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted">No expenses found.</td></tr>';
+        var v = document.getElementById('expensesTotalValue');  if(v) v.textContent = '€0.00';
+        var vv = document.getElementById('expensesVatValue');   if(vv) vv.textContent = '€0.00';
+        var vg = document.getElementById('expensesGrossValue'); if(vg) vg.textContent = '€0.00';
+        return;
+      }
+      var totalAmt = 0, totalVat = 0;
+      tbody.innerHTML = res.data.map(function(e) {
+        totalAmt += parseFloat(e.amount||0);
+        totalVat += parseFloat(e.vat_amount||0);
+        return '<tr>'
+          + '<td>' + escHtml(e.expense_date||'') + '</td>'
+          + '<td>' + escHtml(e.category||'') + '</td>'
+          + '<td>' + escHtml(e.description||'') + '</td>'
+          + '<td>' + escHtml(e.supplier||'—') + '</td>'
+          + '<td class="text-right">€' + parseFloat(e.amount||0).toFixed(2) + '</td>'
+          + '<td class="text-right">€' + parseFloat(e.vat_amount||0).toFixed(2) + '</td>'
+          + '<td class="text-right">€' + (parseFloat(e.amount||0)+parseFloat(e.vat_amount||0)).toFixed(2) + '</td>'
+          + '<td><button class="btn btn-sm btn-light" onclick="App.deleteExpense(' + parseInt(e.id) + ')">🗑️</button></td>'
+          + '</tr>';
+      }).join('');
+      var v = document.getElementById('expensesTotalValue');  if(v) v.textContent = '€' + totalAmt.toFixed(2);
+      var vv = document.getElementById('expensesVatValue');   if(vv) vv.textContent = '€' + totalVat.toFixed(2);
+      var vg = document.getElementById('expensesGrossValue'); if(vg) vg.textContent = '€' + (totalAmt+totalVat).toFixed(2);
+    } catch (e) { showToast('Error loading expenses: ' + e.message, 'error'); }
+  }
+
+  function openExpenseModal() {
+    document.getElementById('expenseEditId').value = '';
+    document.getElementById('expenseDate').value = new Date().toISOString().slice(0,10);
+    document.getElementById('expenseCategory').value = 'Materials';
+    document.getElementById('expenseDescription').value = '';
+    document.getElementById('expenseSupplier').value = '';
+    document.getElementById('expenseReceiptRef').value = '';
+    document.getElementById('expenseAmount').value = '';
+    document.getElementById('expenseVatRate').value = '0';
+    document.getElementById('expenseVatAmount').value = '';
+    document.getElementById('expenseModal').classList.remove('hidden');
+  }
+
+  function calcExpenseVat() {
+    var amount  = parseFloat(document.getElementById('expenseAmount').value || 0);
+    var vatRate = parseFloat(document.getElementById('expenseVatRate').value || 0);
+    var vatEl   = document.getElementById('expenseVatAmount');
+    if (vatEl) vatEl.value = (amount * vatRate / 100).toFixed(2);
+  }
+
+  async function saveExpense() {
+    var store = document.getElementById('storeSelect');
+    var storeId = store ? (store.selectedIndex + 1) : 1;
+    var amount = parseFloat(document.getElementById('expenseAmount').value || 0);
+    if (!amount) { showToast('Amount is required', 'error'); return; }
+    var desc = document.getElementById('expenseDescription').value;
+    if (!desc) { showToast('Description is required', 'error'); return; }
+    var payload = {
+      store_id:     storeId,
+      expense_date: document.getElementById('expenseDate').value,
+      category:     document.getElementById('expenseCategory').value,
+      description:  desc,
+      amount:       amount,
+      vat_rate:     parseFloat(document.getElementById('expenseVatRate').value || 0),
+      vat_amount:   parseFloat(document.getElementById('expenseVatAmount').value || 0),
+      supplier:     document.getElementById('expenseSupplier').value || null,
+      receipt_ref:  document.getElementById('expenseReceiptRef').value || null,
+    };
+    try {
+      const resp = await fetch('/ebmpro_api/expenses.php', {
+        method: 'POST',
+        headers: Object.assign({ 'Content-Type': 'application/json' }, Auth.getAuthHeaders()),
+        body: JSON.stringify(payload),
+      });
+      const res = await resp.json();
+      if (res.success) {
+        closeModal('expenseModal');
+        showToast('Expense saved', 'success');
+        loadExpenses();
+      } else {
+        showToast('Error: ' + (res.error || 'Unknown error'), 'error');
+      }
+    } catch (e) { showToast('Error: ' + e.message, 'error'); }
+  }
+
+  async function deleteExpense(id) {
+    if (!confirm('Delete this expense?')) return;
+    try {
+      const resp = await fetch('/ebmpro_api/expenses.php?id=' + parseInt(id), {
+        method: 'DELETE',
+        headers: Auth.getAuthHeaders(),
+      });
+      const res = await resp.json();
+      showToast(res.success ? 'Deleted' : ('Error: ' + res.error), res.success ? 'success' : 'error');
+      if (res.success) loadExpenses();
+    } catch (e) { showToast('Error: ' + e.message, 'error'); }
+  }
+
   document.addEventListener('DOMContentLoaded', init);
 
   return {
@@ -1440,5 +1866,29 @@ const App = (() => {
     openAdjustStockModal,
     saveStockAdjust,
     adjustStock,
+    loadQuotes,
+    openQuoteModal,
+    renderQuoteItems,
+    addQuoteItem,
+    _quoteItemChange,
+    _removeQuoteItem,
+    updateQuoteTotal,
+    saveQuote,
+    sendQuote,
+    convertQuoteToInvoice,
+    loadRecurring,
+    openRecurringModal,
+    renderRecurringItems,
+    addRecurringItem,
+    _recurringItemChange,
+    _removeRecurringItem,
+    saveRecurring,
+    toggleRecurring,
+    deleteRecurring,
+    loadExpenses,
+    openExpenseModal,
+    calcExpenseVat,
+    saveExpense,
+    deleteExpense,
   };
 })();
