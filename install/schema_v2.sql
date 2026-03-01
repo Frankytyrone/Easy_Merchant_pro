@@ -103,7 +103,7 @@ CREATE TABLE IF NOT EXISTS recurring_invoices (
   created_by INT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   INDEX idx_customer (customer_id),
-  INDEX idx_next_run (next_run_date, active)
+  INDEX idx_next_run (active, next_run_date)
 );
 
 CREATE TABLE IF NOT EXISTS recurring_invoice_items (

@@ -8,6 +8,7 @@ $method = $_SERVER['REQUEST_METHOD'];
 
 // ── run_due is protected by CRON_SECRET, not Bearer token ────────────────────
 $action = $_GET['action'] ?? '';
+$auth   = null;
 if ($action === 'run_due') {
     $cronSecret = $_SERVER['HTTP_X_CRON_SECRET'] ?? '';
     if (!defined('CRON_SECRET') || !hash_equals(CRON_SECRET, $cronSecret)) {

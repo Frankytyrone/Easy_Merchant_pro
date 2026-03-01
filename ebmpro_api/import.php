@@ -69,7 +69,7 @@ try {
                     $headers = array_map('trim', $line);
                     continue;
                 }
-                $rows[] = array_combine($headers, array_pad($line, count($headers), ''));
+                $rows[] = array_combine($headers, array_pad(array_slice($line, 0, count($headers)), count($headers), ''));
             }
             fclose($fh);
         }

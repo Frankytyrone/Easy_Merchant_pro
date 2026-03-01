@@ -51,7 +51,7 @@ function nextQuoteNumber(PDO $pdo, string $storeCode): string
             ? $pr['quote_prefix']
             : strtoupper(substr($storeCode, 0, 3)) . '-Q';
 
-        return $prefix . '-' . date('Y') . '-' . str_pad($current - 1000, 3, '0', STR_PAD_LEFT);
+        return $prefix . '-' . date('Y') . '-' . str_pad($current, 3, '0', STR_PAD_LEFT);
     } catch (Throwable $e) {
         $pdo->rollBack();
         throw $e;
@@ -156,7 +156,7 @@ function sendQuoteEmail(PDO $pdo, array $quote): array
         $mail->SMTPAuth   = !empty($smtpUser);
         $mail->Username   = $smtpUser;
         $mail->Password   = $smtpPass;
-        $mail->SMTPSecure = 'tls';
+        $mail->SMTPSecure = ($smtpPort === 465) ? 'ssl' : 'tls';
         $mail->setFrom($fromEmail, $fromName);
         $mail->addAddress($toEmail);
         $mail->Subject  = $subject;
@@ -170,7 +170,7 @@ function sendQuoteEmail(PDO $pdo, array $quote): array
         $pdo->prepare(
             'INSERT INTO email_log (customer_id, to_email, subject, type, sent_at, status)
              VALUES (?,?,?,?,NOW(),?)'
-        )->execute([$quote['customer_id'], $toEmail, $subject, 'invoice', 'sent']);
+        )->execute([$quote['customer_id'], $toEmail, $subject, 'quote', 'sent']);
 
         return ['success' => true];
     } catch (PHPMailer\PHPMailer\Exception $e) {
@@ -251,8 +251,7 @@ try {
             }
 
             $sc        = quoteStoreCode($pdo, (int)$quote['store_id']);
-            $invNumber = nextQuoteNumber($pdo, $sc); // reuse number generation for invoice prefix
-            // Actually use invoice sequence for invoices
+            // Use invoice sequence for the new invoice number
             $seqStmt = $pdo->prepare(
                 'SELECT next_invoice_num FROM invoice_sequences WHERE store_code = ? FOR UPDATE'
             );

@@ -22,6 +22,7 @@ require_once $configPath;
 
 $apiUrl    = (defined('API_URL') ? API_URL : 'http://localhost/ebmpro_api')
     . '/recurring.php?action=run_due';
+// NOTE: On production, ensure API_URL in config.php uses https:// to protect CRON_SECRET in transit.
 $cronSecret = defined('CRON_SECRET') ? CRON_SECRET : '';
 
 if (empty($cronSecret) || $cronSecret === 'CHANGE_ME_TO_RANDOM_SECRET') {
