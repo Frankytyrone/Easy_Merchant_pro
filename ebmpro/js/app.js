@@ -34,6 +34,8 @@ const App = (() => {
       case 'customersScreen': Customer.showCustomerList(); break;
       case 'reportsScreen':  showReports();          break;
       case 'settingsScreen': showSettings();         break;
+      case 'adminScreen':    loadAdminDashboard();   break;
+      case 'stockScreen':    loadStock();            break;
     }
   }
 
@@ -58,10 +60,16 @@ const App = (() => {
     const el = document.getElementById('headerUserName');
     if (el) el.textContent = user ? `${user.full_name || user.name || user.username} ▾` : 'Guest ▾';
 
-    // Show/hide admin-only nav items
+    // Show/hide admin-only nav items (admin + manager)
     const isAdmin = user && (user.role === 'admin' || user.role === 'manager');
     document.querySelectorAll('.admin-only').forEach(el => {
       el.classList.toggle('hidden', !isAdmin);
+    });
+
+    // Show/hide items for admin role only
+    const isAdminRole = user && user.role === 'admin';
+    document.querySelectorAll('.admin-role-only').forEach(el => {
+      el.classList.toggle('hidden', !isAdminRole);
     });
   }
 
@@ -138,16 +146,42 @@ const App = (() => {
     try {
       const resp = await fetch(`/ebmpro_api/invoices.php?${params}`, { headers: Auth.getAuthHeaders() });
       const data = await resp.json();
-      const list = Array.isArray(data) ? data : (data.invoices || []);
+      const list = Array.isArray(data) ? data : (data.invoices || data.data || []);
 
       if (!list.length) {
         tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No invoices found.</td></tr>';
+        hideBanner('overdueBanner');
         return;
       }
 
-      tbody.innerHTML = list.map(inv => `
+      const today = new Date(); today.setHours(0,0,0,0);
+      const overdueList = list.filter(inv => {
+        if (!inv.due_date) return false;
+        if (inv.status !== 'sent' && inv.status !== 'part_paid' && inv.status !== 'partial') return false;
+        return new Date(inv.due_date) < today;
+      });
+
+      // Show/hide overdue banner
+      const banner = document.getElementById('overdueBanner');
+      if (banner) {
+        if (overdueList.length > 0) {
+          banner.classList.remove('hidden');
+          banner.style.display = 'flex';
+          const bannerText = document.getElementById('overdueBannerText');
+          if (bannerText) bannerText.textContent = `⚠️ ${overdueList.length} invoice${overdueList.length > 1 ? 's' : ''} are overdue`;
+          // Store for the modal
+          banner._overdueList = overdueList;
+        } else {
+          banner.classList.add('hidden');
+          banner.style.display = 'none';
+        }
+      }
+
+      tbody.innerHTML = list.map(inv => {
+        const emailedBadge = inv.email_sent_at ? ' <span title="Emailed on ' + escHtml(inv.email_sent_at) + '">📧</span>' : '';
+        return `
         <tr onclick="App.openInvoice('${inv.id}')">
-          <td><strong>${escHtml(inv.invoice_number || '—')}</strong></td>
+          <td><strong>${escHtml(inv.invoice_number || '—')}</strong>${emailedBadge}</td>
           <td>${escHtml(inv.customer_name || '—')}</td>
           <td>${fmtDate(inv.invoice_date)}</td>
           <td>${fmtDate(inv.due_date)}</td>
@@ -155,10 +189,16 @@ const App = (() => {
           <td class="text-right">${fmtCur(inv.balance)}</td>
           <td><span class="badge badge-${escHtml(inv.status || 'draft')}">${escHtml((inv.status || 'draft').replace('_',' ').toUpperCase())}</span></td>
         </tr>
-      `).join('');
+      `;
+      }).join('');
     } catch {
       tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">Failed to load invoices.</td></tr>';
     }
+  }
+
+  function hideBanner(id) {
+    const el = document.getElementById(id);
+    if (el) { el.classList.add('hidden'); el.style.display = 'none'; }
   }
 
   /* ── Open invoice from list ───────────────────────────────── */
@@ -166,6 +206,17 @@ const App = (() => {
     showScreen('invoiceScreen');
     try {
       await Invoice.loadInvoice(id);
+      // Load email tracking after invoice is loaded
+      loadEmailTrackingStatus(id);
+      // Show/hide Send Reminder button
+      const inv = Invoice.getCurrent();
+      const reminderBtn = document.getElementById('btnSendReminder');
+      if (reminderBtn) {
+        const today = new Date(); today.setHours(0,0,0,0);
+        const isOverdue = inv && inv.due_date && new Date(inv.due_date) < today &&
+          (inv.status === 'sent' || inv.status === 'part_paid' || inv.status === 'partial');
+        reminderBtn.classList.toggle('hidden', !isOverdue);
+      }
     } catch (err) {
       showToast(err.message || 'Failed to load invoice.', 'danger');
     }
@@ -263,39 +314,67 @@ const App = (() => {
 
   /* ── Email invoice ────────────────────────────────────────── */
   function emailInvoice(invoiceId) {
-    const modal   = document.getElementById('emailModal');
+    const modal = document.getElementById('emailInvoiceModal');
     if (!modal) return;
-    const inv     = Invoice.getCurrent();
-    const toEl    = modal.querySelector('[name="email_to"]');
-    const subjEl  = modal.querySelector('[name="email_subject"]');
-    const bodyEl  = modal.querySelector('[name="email_body"]');
+    const inv    = Invoice.getCurrent();
+    const toEl   = document.getElementById('emailInv_to');
+    const subjEl = document.getElementById('emailInv_subject');
+    const msgEl  = document.getElementById('emailInv_message');
 
     if (toEl)   toEl.value   = inv.customer_email || '';
-    if (subjEl) subjEl.value = `${(inv.invoice_type === 'quote' ? 'Quote' : 'Invoice')} ${inv.invoice_number || ''} from Easy Builders Merchant`;
-    if (bodyEl) bodyEl.value = `Dear ${inv.customer_name || 'Customer'},\n\nPlease find attached your ${inv.invoice_type || 'invoice'} for ${fmtCur(inv.total)}.\n\nThank you for your business.\n\nEasy Builders Merchant`;
+    if (subjEl) subjEl.value = `Invoice ${inv.invoice_number || ''} from Easy Builders Merchant`;
+    if (msgEl)  msgEl.value  = `Dear ${inv.customer_name || 'Customer'},\n\nPlease find attached your invoice ${inv.invoice_number || ''} for ${fmtCur(inv.total)}.\n\nPayment is due by ${fmtDate(inv.due_date) || 'the due date shown on the invoice'}.\n\nThank you for your business.\n\nEasy Builders Merchant`;
 
-    const sendBtn = modal.querySelector('#btnSendEmail');
+    const sendBtn = document.getElementById('btnSendEmailInvoice');
     if (sendBtn) {
       sendBtn.onclick = async () => {
+        const id = invoiceId || inv.id;
         const payload = {
-          invoice_id: invoiceId || inv.id,
-          to:         toEl   ? toEl.value   : '',
+          invoice_id: id,
+          to_email:   toEl   ? toEl.value   : '',
           subject:    subjEl ? subjEl.value : '',
-          body:       bodyEl ? bodyEl.value : ''
+          message:    msgEl  ? msgEl.value  : '',
+          type:       'invoice',
         };
         sendBtn.disabled = true;
         try {
           await Sync.syncData('/ebmpro_api/email.php', payload, 'POST');
-          closeModal('emailModal');
-          showToast('Email sent!', 'success');
-        } catch (err) {
-          showToast(err.message || 'Failed to send email.', 'danger');
+          closeModal('emailInvoiceModal');
+          showToast(`✅ Invoice emailed to ${payload.to_email}`, 'success');
+          if (id) loadEmailTrackingStatus(id);
+        } catch {
+          showToast('❌ Failed to send email — check SMTP settings', 'danger');
         } finally {
           sendBtn.disabled = false;
         }
       };
     }
     modal.classList.remove('hidden');
+  }
+
+  /* ── Load email tracking status ───────────────────────────── */
+  async function loadEmailTrackingStatus(invoiceId) {
+    const el = document.getElementById('emailTrackingStatus');
+    if (!el || !invoiceId) return;
+    try {
+      const resp = await fetch(`/ebmpro_api/email.php?invoice_id=${invoiceId}`, { headers: Auth.getAuthHeaders() });
+      const data = await resp.json();
+      if (!data.success || !data.data) {
+        el.classList.add('hidden');
+        return;
+      }
+      const d = data.data;
+      let html = `📧 Emailed on ${fmtDate(d.emailed_at)} — `;
+      if (d.opened_count && parseInt(d.opened_count) > 0) {
+        html += `👁️ Opened ${d.opened_count} time${d.opened_count > 1 ? 's' : ''}, last opened ${fmtDate(d.last_opened_at)}`;
+      } else {
+        html += '⏳ Not opened yet';
+      }
+      el.innerHTML = html;
+      el.classList.remove('hidden');
+    } catch {
+      el.classList.add('hidden');
+    }
   }
 
   /* ── Payment modal ────────────────────────────────────────── */
@@ -542,6 +621,375 @@ const App = (() => {
     }
   }
 
+  /* ── Send single overdue reminder from invoice detail ────────── */
+  async function sendSingleReminder() {
+    const inv = Invoice.getCurrent();
+    if (!inv || !inv.id) { showToast('Please save the invoice first.', 'warning'); return; }
+    const btn = document.getElementById('btnSendReminder');
+    if (btn) { btn.disabled = true; btn.innerHTML = '⏳ Sending…'; }
+    try {
+      await Sync.syncData('/ebmpro_api/reminders.php', { invoice_id: inv.id }, 'POST');
+      showToast('✅ Reminder sent.', 'success');
+    } catch {
+      showToast('❌ Failed to send reminder — check SMTP settings', 'danger');
+    } finally {
+      if (btn) { btn.disabled = false; btn.innerHTML = '⚠️ Send Reminder'; }
+    }
+  }
+
+  /* ── Open overdue modal ───────────────────────────────────── */
+  function openOverdueModal() {
+    const modal = document.getElementById('overdueModal');
+    if (!modal) return;
+    const banner = document.getElementById('overdueBanner');
+    const list   = (banner && banner._overdueList) ? banner._overdueList : [];
+    const tbody  = document.getElementById('overdueInvoicesTbody');
+    if (tbody) {
+      if (!list.length) {
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No overdue invoices.</td></tr>';
+      } else {
+        const today = new Date(); today.setHours(0,0,0,0);
+        tbody.innerHTML = list.map(inv => {
+          const due   = new Date(inv.due_date);
+          const days  = Math.floor((today - due) / 86400000);
+          return `<tr>
+            <td><input type="checkbox" class="overdue-chk" value="${escHtml(String(inv.id))}" checked></td>
+            <td>${escHtml(inv.invoice_number || '—')}</td>
+            <td>${escHtml(inv.customer_name  || '—')}</td>
+            <td class="text-right">${fmtCur(inv.balance)}</td>
+            <td>${days} day${days !== 1 ? 's' : ''}</td>
+          </tr>`;
+        }).join('');
+      }
+    }
+    modal.classList.remove('hidden');
+  }
+
+  /* ── Toggle all overdue checkboxes ───────────────────────── */
+  function toggleAllOverdue(checked) {
+    document.querySelectorAll('.overdue-chk').forEach(cb => { cb.checked = checked; });
+  }
+
+  /* ── Send selected reminders ──────────────────────────────── */
+  async function sendSelectedReminders() {
+    const ids = Array.from(document.querySelectorAll('.overdue-chk:checked')).map(cb => parseInt(cb.value));
+    if (!ids.length) { showToast('No invoices selected.', 'warning'); return; }
+    const btn = document.getElementById('btnSendSelectedReminders');
+    if (btn) { btn.disabled = true; btn.innerHTML = '⏳ Sending…'; }
+    try {
+      const result = await Sync.syncData('/ebmpro_api/reminders.php', { invoice_ids: ids }, 'POST');
+      closeModal('overdueModal');
+      showToast(`✅ Sent ${result.sent || ids.length} reminder${ids.length !== 1 ? 's' : ''}.`, 'success');
+    } catch {
+      showToast('❌ Failed to send reminders — check SMTP settings', 'danger');
+    } finally {
+      if (btn) { btn.disabled = false; btn.innerHTML = '📧 Send Selected Reminders'; }
+    }
+  }
+
+  /* ── Admin dashboard ──────────────────────────────────────── */
+  async function loadAdminDashboard() {
+    try {
+      const [dashResp, auditResp] = await Promise.all([
+        fetch('/ebmpro_api/admin.php?action=dashboard', { headers: Auth.getAuthHeaders() }),
+        fetch('/ebmpro_api/admin.php?action=audit&limit=10', { headers: Auth.getAuthHeaders() }),
+      ]);
+      const dash  = await dashResp.json();
+      const audit = await auditResp.json();
+
+      if (dash.success) {
+        // Sales
+        const sales = dash.today_sales || [];
+        const fal = sales.find(s => s.store_code === 'FAL');
+        const gwe = sales.find(s => s.store_code === 'GWE');
+        const falEl = document.getElementById('adminFalSales');
+        const gweEl = document.getElementById('adminGweSales');
+        if (falEl) falEl.textContent = fmtCur(fal ? fal.total_sales : 0);
+        if (gweEl) gweEl.textContent = fmtCur(gwe ? gwe.total_sales : 0);
+
+        // Health
+        const h = dash.health || {};
+        const healthEl = document.getElementById('adminHealthInfo');
+        if (healthEl) healthEl.innerHTML = `
+          <div>💾 Database: ${h.db_size_mb || 0} MB</div>
+          <div>🔄 Sync pending: ${h.sync_pending || 0}</div>
+          <div>📦 Last backup: ${h.last_backup ? fmtDate(h.last_backup) : 'None'}</div>
+        `;
+        const sizeEl = document.getElementById('adminDbSize');
+        if (sizeEl) sizeEl.textContent = (h.db_size_mb || 0) + ' MB';
+        const syncEl = document.getElementById('adminSyncPending');
+        if (syncEl) syncEl.textContent = h.sync_pending || 0;
+
+        // Who's online
+        const onlineEl = document.getElementById('adminOnlineList');
+        if (onlineEl) {
+          const online = dash.online || [];
+          if (!online.length) {
+            onlineEl.textContent = 'No active users in the last 5 minutes.';
+          } else {
+            onlineEl.innerHTML = online.map(u =>
+              `<div>👤 ${escHtml(u.username)} (${escHtml(u.store_code || '—')}) — ${escHtml(u.last_seen || '')}</div>`
+            ).join('');
+          }
+        }
+      }
+
+      // Audit log
+      const auditTbody = document.getElementById('adminAuditTbody');
+      if (auditTbody) {
+        const logs = audit.success ? (audit.data || []) : [];
+        auditTbody.innerHTML = logs.map(l => `
+          <tr>
+            <td>${escHtml(l.created_at || '')}</td>
+            <td>${escHtml(l.username   || '')}</td>
+            <td>${escHtml(l.action     || '')}</td>
+            <td>${escHtml(l.table_name || '')}</td>
+            <td>${escHtml(String(l.record_id || ''))}</td>
+          </tr>
+        `).join('') || '<tr><td colspan="5" class="text-center text-muted">No entries.</td></tr>';
+      }
+
+      // Load operators
+      await loadOperators();
+    } catch {
+      showToast('Failed to load admin dashboard.', 'danger');
+    }
+  }
+
+  /* ── Admin: run backup ────────────────────────────────────── */
+  async function runAdminBackup() {
+    const btn = document.querySelector('[onclick="App.runAdminBackup()"]');
+    if (btn) { btn.disabled = true; btn.innerHTML = '⏳ Backing up…'; }
+    try {
+      const resp = await fetch('/ebmpro_api/admin.php?action=run_backup', {
+        method: 'POST',
+        headers: Auth.getAuthHeaders(),
+      });
+      const data = await resp.json();
+      showToast(data.success ? `✅ Backup created: ${data.filename}` : '❌ Backup failed.', data.success ? 'success' : 'danger');
+    } catch {
+      showToast('❌ Backup failed.', 'danger');
+    } finally {
+      if (btn) { btn.disabled = false; btn.innerHTML = '💾 Run Backup Now'; }
+    }
+  }
+
+  /* ── Admin: load operators ────────────────────────────────── */
+  async function loadOperators() {
+    const tbody = document.getElementById('adminUsersTbody');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="5" class="text-center"><span class="spinner"></span></td></tr>';
+    try {
+      const resp = await fetch('/ebmpro_api/admin.php?action=operators', { headers: Auth.getAuthHeaders() });
+      const data = await resp.json();
+      const users = data.data || [];
+      if (!users.length) {
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No users found.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = users.map(u => `
+        <tr>
+          <td>${escHtml(u.username || '')}</td>
+          <td>${escHtml(u.role || '')}</td>
+          <td>${escHtml(u.store_id ? 'Store ' + u.store_id : 'All')}</td>
+          <td><span class="badge badge-${u.active ? 'paid' : 'cancelled'}">${u.active ? 'Active' : 'Locked'}</span></td>
+          <td style="white-space:nowrap">
+            <button class="btn btn-sm btn-light" onclick="App.openEditUserModal(${parseInt(u.id)},'${escHtml(u.username)}','${escHtml(u.role)}',${parseInt(u.store_id) || ''})">Edit</button>
+            <button class="btn btn-sm btn-light" onclick="App.lockOperator(${parseInt(u.id)},${Number(u.active) ? 0 : 1})">${u.active ? '🔒 Lock' : '🔓 Unlock'}</button>
+            <button class="btn btn-sm btn-light" onclick="App.promptResetPassword(${parseInt(u.id)})">🔑 Reset PW</button>
+          </td>
+        </tr>
+      `).join('');
+    } catch {
+      tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Failed to load users.</td></tr>';
+    }
+  }
+
+  /* ── Admin: open add user modal ───────────────────────────── */
+  function openAddUserModal() {
+    document.getElementById('editUserId').value = '';
+    document.getElementById('editUserUsername').value = '';
+    document.getElementById('editUserPassword').value = '';
+    document.getElementById('editUserRole').value = 'counter';
+    document.getElementById('editUserStore').value = '';
+    document.getElementById('addUserModalTitle').textContent = '👤 Add User';
+    const note = document.getElementById('editUserPwNote');
+    if (note) note.textContent = '(required for new user)';
+    document.getElementById('addUserModal').classList.remove('hidden');
+  }
+
+  /* ── Admin: open edit user modal ──────────────────────────── */
+  function openEditUserModal(id, username, role, storeId) {
+    document.getElementById('editUserId').value = id;
+    document.getElementById('editUserUsername').value = username;
+    document.getElementById('editUserPassword').value = '';
+    document.getElementById('editUserRole').value = role;
+    document.getElementById('editUserStore').value = storeId || '';
+    document.getElementById('addUserModalTitle').textContent = '✏️ Edit User';
+    const note = document.getElementById('editUserPwNote');
+    if (note) note.textContent = '(leave blank to keep existing)';
+    document.getElementById('addUserModal').classList.remove('hidden');
+  }
+
+  /* ── Admin: save operator ─────────────────────────────────── */
+  async function saveOperator() {
+    const id       = document.getElementById('editUserId').value;
+    const username = document.getElementById('editUserUsername').value.trim();
+    const password = document.getElementById('editUserPassword').value;
+    const role     = document.getElementById('editUserRole').value;
+    const storeId  = document.getElementById('editUserStore').value;
+
+    if (!username) { showToast('Username is required.', 'warning'); return; }
+    if (!id && !password) { showToast('Password is required for new users.', 'warning'); return; }
+
+    const data = { username, role, store_id: storeId || null };
+    if (id) data.id = parseInt(id);
+    if (password) data.password = password;
+
+    const btn = document.getElementById('btnSaveUser');
+    if (btn) btn.disabled = true;
+    try {
+      await Sync.syncData('/ebmpro_api/admin.php?action=operator', data, 'POST');
+      closeModal('addUserModal');
+      showToast('✅ User saved.', 'success');
+      await loadOperators();
+    } catch (err) {
+      showToast(err.message || '❌ Failed to save user.', 'danger');
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  /* ── Admin: lock/unlock operator ─────────────────────────── */
+  async function lockOperator(userId, active) {
+    try {
+      await Sync.syncData('/ebmpro_api/admin.php?action=lock', { id: userId, active }, 'POST');
+      showToast(active ? '🔓 User unlocked.' : '🔒 User locked.', 'success');
+      await loadOperators();
+    } catch {
+      showToast('❌ Failed to update user.', 'danger');
+    }
+  }
+
+  /* ── Admin: prompt reset password ────────────────────────── */
+  async function promptResetPassword(userId) {
+    const newPass = prompt('Enter new password for user (min 6 characters):');
+    if (!newPass || newPass.length < 6) { showToast('Password must be at least 6 characters.', 'warning'); return; }
+    await resetPassword(userId, newPass);
+  }
+
+  /* ── Admin: reset password ────────────────────────────────── */
+  async function resetPassword(userId, newPass) {
+    try {
+      await Sync.syncData('/ebmpro_api/admin.php?action=reset_password', { id: userId, password: newPass }, 'POST');
+      showToast('✅ Password reset.', 'success');
+    } catch {
+      showToast('❌ Failed to reset password.', 'danger');
+    }
+  }
+
+  /* ── Stock: load ──────────────────────────────────────────── */
+  async function loadStock() {
+    const tbody   = document.getElementById('stockTbody');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="6" class="text-center"><span class="spinner"></span> Loading…</td></tr>';
+
+    const lowOnly = document.getElementById('stockLowOnly');
+    const params  = lowOnly && lowOnly.checked ? '?low=1' : '';
+
+    try {
+      const resp = await fetch(`/ebmpro_api/stock.php${params}`, { headers: Auth.getAuthHeaders() });
+      const data = await resp.json();
+      const list = data.data || [];
+
+      if (!list.length) {
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No stock records found.</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = list.map(s => {
+        const qty    = parseFloat(s.current_qty);
+        const minQty = parseFloat(s.min_qty || 0);
+        let rowStyle = '';
+        if (qty === 0)        rowStyle = 'background:rgba(255,152,0,.12)';
+        else if (qty < minQty) rowStyle = 'background:rgba(244,67,54,.12)';
+        return `<tr style="${rowStyle}" data-code="${escHtml(s.product_code || '')}" data-desc="${escHtml(s.description || '')}">
+          <td><strong>${escHtml(s.product_code || '—')}</strong></td>
+          <td>${escHtml(s.description || '—')}</td>
+          <td class="text-right" style="${qty === 0 ? 'color:#ff9800;font-weight:600' : qty < minQty ? 'color:#f44336;font-weight:600' : ''}">${qty}</td>
+          <td class="text-right">${minQty || '—'}</td>
+          <td>${s.last_updated ? fmtDate(s.last_updated) : '—'}</td>
+          <td>
+            <button class="btn btn-sm btn-light" onclick="App.openAdjustStockModal(${parseInt(s.product_id)},'${escHtml(s.description || '')}')">
+              ✏️ Adjust
+            </button>
+          </td>
+        </tr>`;
+      }).join('');
+
+      // Restore any active filter
+      const searchInput = document.getElementById('stockSearchInput');
+      if (searchInput && searchInput.value) filterStock(searchInput.value);
+    } catch {
+      tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Failed to load stock data.</td></tr>';
+    }
+  }
+
+  /* ── Stock: filter table ──────────────────────────────────── */
+  function filterStock(query) {
+    const q = (query || '').toLowerCase();
+    document.querySelectorAll('#stockTbody tr').forEach(row => {
+      const code = (row.dataset.code || '').toLowerCase();
+      const desc = (row.dataset.desc || '').toLowerCase();
+      row.style.display = (!q || code.includes(q) || desc.includes(q)) ? '' : 'none';
+    });
+  }
+
+  /* ── Stock: open adjust modal ─────────────────────────────── */
+  function openAdjustStockModal(productId, name) {
+    document.getElementById('adjustStockProductId').value = productId;
+    document.getElementById('adjustStockProductName').value = name;
+    document.getElementById('adjustStockQty').value = '';
+    document.getElementById('adjustStockReason').value = 'Delivery received';
+    closeModal('adjustStockModal');
+    document.getElementById('adjustStockModal').classList.remove('hidden');
+  }
+
+  /* ── Stock: save adjustment ───────────────────────────────── */
+  async function saveStockAdjust() {
+    const productId = parseInt(document.getElementById('adjustStockProductId').value);
+    const change    = parseFloat(document.getElementById('adjustStockQty').value);
+    const reason    = document.getElementById('adjustStockReason').value;
+
+    if (!productId || isNaN(change) || change === 0) {
+      showToast('Please enter a valid quantity change.', 'warning');
+      return;
+    }
+
+    const btn = document.getElementById('btnSaveStockAdjust');
+    if (btn) btn.disabled = true;
+    try {
+      await Sync.syncData('/ebmpro_api/stock.php', { product_id: productId, quantity_change: change, reason }, 'POST');
+      closeModal('adjustStockModal');
+      showToast('✅ Stock updated.', 'success');
+      await loadStock();
+    } catch (err) {
+      showToast(err.message || '❌ Failed to update stock.', 'danger');
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  /* ── Adjust stock (public API) ────────────────────────────── */
+  async function adjustStock(productId, change, reason) {
+    try {
+      await Sync.syncData('/ebmpro_api/stock.php', { product_id: productId, quantity_change: change, reason }, 'POST');
+      showToast('✅ Stock updated.', 'success');
+    } catch (err) {
+      showToast(err.message || '❌ Failed to update stock.', 'danger');
+    }
+  }
+
   /* ── Send Payment Link ────────────────────────────────────── */
   async function sendPaymentLink() {
     const inv = typeof Invoice !== 'undefined' ? Invoice.getCurrent() : null;
@@ -598,6 +1046,7 @@ const App = (() => {
     saveSettings,
     getSettings,
     emailInvoice,
+    loadEmailTrackingStatus,
     showAddPaymentModal,
     showAuditLog,
     closeModal,
@@ -608,5 +1057,23 @@ const App = (() => {
     showToast,
     updateHeaderUser,
     toast: showToast,
+    sendSingleReminder,
+    openOverdueModal,
+    toggleAllOverdue,
+    sendSelectedReminders,
+    loadAdminDashboard,
+    runAdminBackup,
+    loadOperators,
+    openAddUserModal,
+    openEditUserModal,
+    saveOperator,
+    lockOperator,
+    promptResetPassword,
+    resetPassword,
+    loadStock,
+    filterStock,
+    openAdjustStockModal,
+    saveStockAdjust,
+    adjustStock,
   };
 })();
