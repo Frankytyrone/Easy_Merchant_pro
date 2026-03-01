@@ -1,18 +1,53 @@
-Options -Indexes
-
-# Pass Authorization header through on XAMPP/Windows (Apache strips it by default)
+# Force HTTPS — redirect all HTTP to HTTPS
 RewriteEngine On
+RewriteCond %{HTTPS} off
+RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+# Pass Authorization header through to PHP (required for JWT)
 RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
 
-php_value max_execution_time 300
-php_value max_input_time 300
-php_value memory_limit 512M
-php_value upload_max_filesize 128M
-php_value post_max_size 128M
+# Block common attack patterns in URL
+RewriteCond %{QUERY_STRING} (union|select|insert|drop|delete|update|cast|create|char|convert|alter|exec|declare) [NC]
+RewriteRule .* - [F,L]
+
+# Block bad bots and scanners
+RewriteCond %{HTTP_USER_AGENT} (sqlmap|nikto|nmap|masscan|zgrab|libwww-perl|python-requests|go-http-client|curl) [NC]
+RewriteRule .* - [F,L]
+
+# Block direct access to config.php
+<Files "config.php">
+    Order allow,deny
+    Deny from all
+</Files>
+
+# Block direct access to all .sql files
+<FilesMatch "\.sql$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+# Block direct access to all .log files
+<FilesMatch "\.log$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+# Block access to hidden files
+<FilesMatch "^\.">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+# Prevent directory listing
+Options -Indexes
 
 # Security headers
-Header always set X-Content-Type-Options nosniff
-Header always set X-Frame-Options DENY
+Header always set X-Content-Type-Options "nosniff"
+Header always set X-Frame-Options "SAMEORIGIN"
+Header always set X-XSS-Protection "1; mode=block"
+Header always set Referrer-Policy "strict-origin-when-cross-origin"
+Header always set Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https://js.stripe.com; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-src https://js.stripe.com; object-src 'none';"
+Header always set Permissions-Policy "geolocation=(), microphone=(), camera=()"
 
 # CORS for both localhost and live domain
 SetEnvIf Origin "^(https?://localhost|https://app\.shanemcgee\.biz)$" ORIGIN_OK=$0
@@ -20,3 +55,13 @@ Header always set Access-Control-Allow-Origin "%{ORIGIN_OK}e" env=ORIGIN_OK
 Header always set Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
 Header always set Access-Control-Allow-Headers "Content-Type, Authorization, X-Auth-Token"
 Header always set Access-Control-Allow-Credentials "true"
+
+# PHP hardening
+php_flag display_errors Off
+php_flag log_errors On
+php_value error_log /tmp/ebmpro_errors.log
+php_value memory_limit 256M
+php_value upload_max_filesize 64M
+php_value post_max_size 64M
+php_value max_execution_time 120
+php_value max_input_time 300

@@ -1,0 +1,16 @@
+# IMPORTANT: Delete or rename the install/ folder after installation.
+# This .htaccess is a safety net only.
+
+# Check for a lock file — if it exists, block all access
+RewriteEngine On
+RewriteCond %{DOCUMENT_ROOT}/install/installed.lock -f
+RewriteRule .* - [F,L]
+
+# Block direct access to SQL files
+<FilesMatch "\.sql$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+# Prevent directory listing
+Options -Indexes

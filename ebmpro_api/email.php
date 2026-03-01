@@ -131,7 +131,7 @@ function sendEmail(PDO $pdo, array $params): array
 
     } catch (PHPMailer\PHPMailer\Exception $e) {
         error_log('email.php mailer error: ' . $e->getMessage());
-        return ['success' => false, 'error' => $e->getMessage()];
+        return ['success' => false, 'error' => 'Email sending failed'];
     }
 }
 

@@ -231,7 +231,7 @@ if ($method === 'POST') {
             $mail->send();
         } catch (PHPMailer\PHPMailer\Exception $e) {
             error_log('statements.php mailer error: ' . $e->getMessage());
-            jsonResponse(['success' => false, 'error' => 'Email failed: ' . $e->getMessage()], 500);
+            jsonResponse(['success' => false, 'error' => 'Email sending failed'], 500);
         }
 
         // Log to email_log
