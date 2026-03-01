@@ -80,6 +80,16 @@
     <button data-screen="settingsScreen" class="admin-only" onclick="App.showScreen('settingsScreen')">
       <span class="icon">⚙️</span> Settings
     </button>
+    <hr class="sidebar-divider">
+    <button data-screen="quotesScreen" onclick="App.showScreen('quotesScreen')">
+      <span class="icon">📋</span> Quotes
+    </button>
+    <button data-screen="expensesScreen" onclick="App.showScreen('expensesScreen')">
+      <span class="icon">💸</span> Expenses
+    </button>
+    <button data-screen="recurringScreen" onclick="App.showScreen('recurringScreen')">
+      <span class="icon">🔄</span> Recurring
+    </button>
   </div>
 </nav>
 
@@ -664,6 +674,36 @@
         <p id="importProgressLabel" class="text-muted mt-1" style="font-size:.85rem"></p>
       </div>
       <div id="importResult" class="hidden mt-2"></div>
+
+      <!-- XML / CSV Unified Import -->
+      <hr style="margin:1.25rem 0;border-color:rgba(255,255,255,.1)">
+      <h4 class="mb-2" style="font-size:.95rem;font-weight:600">📄 XML Import (Products or Customers)</h4>
+      <div class="form-row col-3" style="align-items:end">
+        <div class="form-group">
+          <label class="form-label" for="xmlImportType">Data Type</label>
+          <select id="xmlImportType" class="form-control" aria-label="Import type">
+            <option value="products">Products</option>
+            <option value="customers">Customers</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="xmlImportFormat">Format</label>
+          <select id="xmlImportFormat" class="form-control" aria-label="Import format" onchange="App.updateXmlImportAccept()">
+            <option value="csv">CSV</option>
+            <option value="xml">XML</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="xmlImportFile">File</label>
+          <input type="file" id="xmlImportFile" accept=".csv,.xml" class="form-control" aria-label="Import file">
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-light" onclick="App.runUnifiedImport()">⬆️ Import</button>
+        <a id="xmlSampleProductsLink" href="#" onclick="App.downloadXmlSample('products'); return false;" class="btn btn-light">📥 Sample Products XML</a>
+        <a id="xmlSampleCustomersLink" href="#" onclick="App.downloadXmlSample('customers'); return false;" class="btn btn-light">📥 Sample Customers XML</a>
+      </div>
+      <div id="xmlImportResult" class="hidden mt-2"></div>
     </div>
 
     <!-- Payment Gateway Settings -->
@@ -833,6 +873,130 @@
     </div>
   </section>
   <!-- /adminScreen -->
+
+  <!-- ──────────────────────────────────────────────────────────
+       SCREEN 9: Quotes
+  ─────────────────────────────────────────────────────────── -->
+  <section id="quotesScreen" class="screen" aria-label="Quotes">
+    <div class="flex justify-between items-center mb-3">
+      <h2>📋 Quotes</h2>
+      <button class="btn btn-primary btn-sm" onclick="App.openQuoteModal()">➕ New Quote</button>
+    </div>
+
+    <div class="filter-bar mb-3">
+      <select id="quotesStatusFilter" class="form-control" style="width:auto" aria-label="Filter by status"
+        onchange="App.loadQuotes()">
+        <option value="">All Statuses</option>
+        <option value="draft">Draft</option>
+        <option value="sent">Sent</option>
+        <option value="accepted">Accepted</option>
+        <option value="declined">Declined</option>
+        <option value="expired">Expired</option>
+      </select>
+    </div>
+
+    <div class="table-wrap">
+      <table class="data-table" aria-label="Quotes">
+        <thead>
+          <tr>
+            <th>Quote No.</th>
+            <th>Customer</th>
+            <th>Date</th>
+            <th>Expiry</th>
+            <th class="text-right">Total</th>
+            <th>Status</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="quotesTbody">
+          <tr><td colspan="7" class="text-center text-muted">Select Quotes from the menu to load.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+  <!-- /quotesScreen -->
+
+  <!-- ──────────────────────────────────────────────────────────
+       SCREEN 10: Recurring Invoices
+  ─────────────────────────────────────────────────────────── -->
+  <section id="recurringScreen" class="screen" aria-label="Recurring Invoices">
+    <div class="flex justify-between items-center mb-3">
+      <h2>🔄 Recurring Invoices</h2>
+      <button class="btn btn-primary btn-sm" onclick="App.openRecurringModal()">➕ New Recurring Invoice</button>
+    </div>
+
+    <div class="table-wrap">
+      <table class="data-table" aria-label="Recurring invoices">
+        <thead>
+          <tr>
+            <th>Customer</th>
+            <th>Frequency</th>
+            <th>Next Run</th>
+            <th>Last Run</th>
+            <th>Status</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="recurringTbody">
+          <tr><td colspan="6" class="text-center text-muted">Select Recurring from the menu to load.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+  <!-- /recurringScreen -->
+
+  <!-- ──────────────────────────────────────────────────────────
+       SCREEN 11: Expenses
+  ─────────────────────────────────────────────────────────── -->
+  <section id="expensesScreen" class="screen" aria-label="Expenses">
+    <div class="flex justify-between items-center mb-3">
+      <h2>💸 Expenses</h2>
+      <button class="btn btn-primary btn-sm" onclick="App.openExpenseModal()">➕ Add Expense</button>
+    </div>
+
+    <div id="expensesMonthTotal" style="margin-bottom:1rem;padding:.75rem 1rem;background:rgba(76,175,80,.1);border-radius:8px;border-left:4px solid #4caf50;font-size:1rem">
+      Monthly Total: <strong id="expensesMonthTotalVal">€0.00</strong>
+    </div>
+
+    <div class="filter-bar mb-3">
+      <select id="expensesCategoryFilter" class="form-control" style="width:auto" aria-label="Filter by category"
+        onchange="App.loadExpenses()">
+        <option value="">All Categories</option>
+        <option value="Materials">Materials</option>
+        <option value="Fuel">Fuel</option>
+        <option value="Tools">Tools</option>
+        <option value="Subcontractors">Subcontractors</option>
+        <option value="Office">Office</option>
+        <option value="Telephone">Telephone</option>
+        <option value="Insurance">Insurance</option>
+        <option value="Other">Other</option>
+      </select>
+      <input type="date" id="expensesFrom" class="form-control" style="width:auto" aria-label="From date"
+        onchange="App.loadExpenses()">
+      <input type="date" id="expensesTo" class="form-control" style="width:auto" aria-label="To date"
+        onchange="App.loadExpenses()">
+    </div>
+
+    <div class="table-wrap">
+      <table class="data-table" aria-label="Expenses">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Category</th>
+            <th>Description</th>
+            <th>Supplier</th>
+            <th class="text-right">Amount</th>
+            <th class="text-right">VAT</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="expensesTbody">
+          <tr><td colspan="7" class="text-center text-muted">Select Expenses from the menu to load.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+  <!-- /expensesScreen -->
 
 </main>
 <!-- /mainContent -->
@@ -1295,6 +1459,186 @@
         <button class="btn btn-light" onclick="App.closeModal('paymentLinkModal')">Cancel</button>
         <button id="btnCopyPaymentLink" class="btn btn-light hidden" onclick="App.copyPaymentLink()">📋 Copy Link</button>
         <button id="btnGeneratePaymentLink" class="btn btn-primary" onclick="App.generatePaymentLinkFromModal()">🔗 Generate Link</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Quote Modal ────────────────────────────────────────── -->
+<div id="quoteModal" class="hidden" role="dialog" aria-modal="true" aria-labelledby="quoteModalTitle">
+  <div class="modal-backdrop">
+    <div class="modal-card" style="max-width:720px">
+      <div class="modal-header">
+        <h3 id="quoteModalTitle">📋 New Quote</h3>
+        <button class="modal-close" onclick="App.closeModal('quoteModal')" aria-label="Close">×</button>
+      </div>
+      <input type="hidden" id="quoteId">
+      <div class="form-row col-2">
+        <div class="form-group">
+          <label class="form-label" for="quoteCustomerId">Customer *</label>
+          <input type="text" id="quoteCustomerSearch" class="form-control" placeholder="Search customer…" autocomplete="off" aria-label="Customer search">
+          <input type="hidden" id="quoteCustomerId">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="quoteStoreId">Store *</label>
+          <select id="quoteStoreId" class="form-control" aria-label="Store">
+            <option value="1">Falcarragh (FAL)</option>
+            <option value="2">Gweedore (GWE)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="quoteDate">Quote Date *</label>
+          <input type="date" id="quoteDate" class="form-control" aria-label="Quote date">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="quoteExpiryDate">Expiry Date</label>
+          <input type="date" id="quoteExpiryDate" class="form-control" aria-label="Expiry date">
+        </div>
+        <div class="form-group" style="grid-column:1/-1">
+          <label class="form-label" for="quoteNotes">Notes</label>
+          <textarea id="quoteNotes" class="form-control" rows="2" aria-label="Notes"></textarea>
+        </div>
+      </div>
+      <h4 style="margin:.75rem 0 .5rem;font-size:.9rem;font-weight:600">Line Items</h4>
+      <div id="quoteItemsWrap">
+        <div class="quote-item-row" style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr auto;gap:.4rem;align-items:end;margin-bottom:.4rem">
+          <input type="text" class="form-control" placeholder="Description *" name="qi_desc" aria-label="Description">
+          <input type="number" class="form-control" placeholder="Qty" name="qi_qty" value="1" min="0.001" step="0.001" aria-label="Quantity">
+          <input type="number" class="form-control" placeholder="Unit Price" name="qi_price" min="0" step="0.01" aria-label="Unit price">
+          <input type="number" class="form-control" placeholder="VAT%" name="qi_vat" value="23" min="0" step="0.01" aria-label="VAT rate">
+          <button class="btn btn-light btn-sm" onclick="this.closest('.quote-item-row').remove()" aria-label="Remove item">✕</button>
+        </div>
+      </div>
+      <button class="btn btn-light btn-sm mt-1" onclick="App.addQuoteItemRow()">➕ Add Line</button>
+      <div class="modal-footer">
+        <button class="btn btn-light" onclick="App.closeModal('quoteModal')">Cancel</button>
+        <button id="btnSaveQuote" class="btn btn-primary" onclick="App.saveQuote()">💾 Save Quote</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Recurring Invoice Modal ───────────────────────────── -->
+<div id="recurringModal" class="hidden" role="dialog" aria-modal="true" aria-labelledby="recurringModalTitle">
+  <div class="modal-backdrop">
+    <div class="modal-card" style="max-width:680px">
+      <div class="modal-header">
+        <h3 id="recurringModalTitle">🔄 New Recurring Invoice</h3>
+        <button class="modal-close" onclick="App.closeModal('recurringModal')" aria-label="Close">×</button>
+      </div>
+      <input type="hidden" id="recurringId">
+      <div class="form-row col-2">
+        <div class="form-group">
+          <label class="form-label" for="recurringCustomerId">Customer *</label>
+          <input type="text" id="recurringCustomerSearch" class="form-control" placeholder="Search customer…" autocomplete="off" aria-label="Customer search">
+          <input type="hidden" id="recurringCustomerId">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="recurringStoreId">Store *</label>
+          <select id="recurringStoreId" class="form-control" aria-label="Store">
+            <option value="1">Falcarragh (FAL)</option>
+            <option value="2">Gweedore (GWE)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="recurringFrequency">Frequency *</label>
+          <select id="recurringFrequency" class="form-control" aria-label="Frequency">
+            <option value="weekly">Weekly</option>
+            <option value="monthly" selected>Monthly</option>
+            <option value="quarterly">Quarterly</option>
+            <option value="yearly">Yearly</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="recurringNextRun">First Run Date *</label>
+          <input type="date" id="recurringNextRun" class="form-control" aria-label="Next run date">
+        </div>
+        <div class="form-group" style="grid-column:1/-1">
+          <label class="form-label" for="recurringNotes">Notes</label>
+          <textarea id="recurringNotes" class="form-control" rows="2" aria-label="Notes"></textarea>
+        </div>
+      </div>
+      <h4 style="margin:.75rem 0 .5rem;font-size:.9rem;font-weight:600">Line Items</h4>
+      <div id="recurringItemsWrap">
+        <div class="recurring-item-row" style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr auto;gap:.4rem;align-items:end;margin-bottom:.4rem">
+          <input type="text" class="form-control" placeholder="Description *" name="ri_desc" aria-label="Description">
+          <input type="number" class="form-control" placeholder="Qty" name="ri_qty" value="1" min="0.001" step="0.001" aria-label="Quantity">
+          <input type="number" class="form-control" placeholder="Unit Price" name="ri_price" min="0" step="0.01" aria-label="Unit price">
+          <input type="number" class="form-control" placeholder="VAT%" name="ri_vat" value="23" min="0" step="0.01" aria-label="VAT rate">
+          <button class="btn btn-light btn-sm" onclick="this.closest('.recurring-item-row').remove()" aria-label="Remove item">✕</button>
+        </div>
+      </div>
+      <button class="btn btn-light btn-sm mt-1" onclick="App.addRecurringItemRow()">➕ Add Line</button>
+      <div class="modal-footer">
+        <button class="btn btn-light" onclick="App.closeModal('recurringModal')">Cancel</button>
+        <button id="btnSaveRecurring" class="btn btn-primary" onclick="App.saveRecurring()">💾 Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Expense Modal ──────────────────────────────────────── -->
+<div id="expenseModal" class="hidden" role="dialog" aria-modal="true" aria-labelledby="expenseModalTitle">
+  <div class="modal-backdrop">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 id="expenseModalTitle">💸 Add Expense</h3>
+        <button class="modal-close" onclick="App.closeModal('expenseModal')" aria-label="Close">×</button>
+      </div>
+      <input type="hidden" id="expenseId">
+      <div class="form-row col-2">
+        <div class="form-group">
+          <label class="form-label" for="expenseStoreId">Store *</label>
+          <select id="expenseStoreId" class="form-control" aria-label="Store">
+            <option value="1">Falcarragh (FAL)</option>
+            <option value="2">Gweedore (GWE)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="expenseDate">Date *</label>
+          <input type="date" id="expenseDate" class="form-control" aria-label="Expense date">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="expenseCategory">Category *</label>
+          <select id="expenseCategory" class="form-control" aria-label="Category">
+            <option value="Materials">Materials</option>
+            <option value="Fuel">Fuel</option>
+            <option value="Tools">Tools</option>
+            <option value="Subcontractors">Subcontractors</option>
+            <option value="Office">Office</option>
+            <option value="Telephone">Telephone</option>
+            <option value="Insurance">Insurance</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="expenseAmount">Amount (€) *</label>
+          <input type="number" id="expenseAmount" class="form-control" min="0.01" step="0.01" aria-label="Amount">
+        </div>
+        <div class="form-group" style="grid-column:1/-1">
+          <label class="form-label" for="expenseDescription">Description *</label>
+          <input type="text" id="expenseDescription" class="form-control" aria-label="Description">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="expenseSupplier">Supplier</label>
+          <input type="text" id="expenseSupplier" class="form-control" aria-label="Supplier">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="expenseReceiptRef">Receipt Ref.</label>
+          <input type="text" id="expenseReceiptRef" class="form-control" aria-label="Receipt reference">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="expenseVatRate">VAT Rate %</label>
+          <input type="number" id="expenseVatRate" class="form-control" value="0" min="0" step="0.01" aria-label="VAT rate">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="expenseVatAmount">VAT Amount (€)</label>
+          <input type="number" id="expenseVatAmount" class="form-control" value="0" min="0" step="0.01" aria-label="VAT amount">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-light" onclick="App.closeModal('expenseModal')">Cancel</button>
+        <button id="btnSaveExpense" class="btn btn-primary" onclick="App.saveExpense()">💾 Save Expense</button>
       </div>
     </div>
   </div>
