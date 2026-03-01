@@ -6,9 +6,12 @@ header('Content-Type: application/json; charset=utf-8');
 
 $method = $_SERVER['REQUEST_METHOD'];
 
-// run_due action uses CRON_SECRET, not auth token
+// run_due action uses CRON_SECRET via header (preferred) or GET param (fallback)
 if ($method === 'POST' && ($_GET['action'] ?? '') === 'run_due') {
-    if (!defined('CRON_SECRET') || ($_GET['cron_secret'] ?? '') !== CRON_SECRET) {
+    $headerSecret = $_SERVER['HTTP_X_CRON_SECRET'] ?? '';
+    $querySecret  = $_GET['cron_secret'] ?? '';
+    $provided     = $headerSecret !== '' ? $headerSecret : $querySecret;
+    if (!defined('CRON_SECRET') || !hash_equals(CRON_SECRET, $provided)) {
         jsonResponse(['success' => false, 'error' => 'Unauthorized'], 401);
     }
     $pdo = getDb();

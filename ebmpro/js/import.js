@@ -61,14 +61,11 @@ const Import = (() => {
       if (progressLabel) progressLabel.textContent = 'Import complete.';
 
       const errCount = Array.isArray(data.errors) ? data.errors.length : 0;
+      const errSlice0 = data.errors ? data.errors.slice(0, 20) : [];
+      const truncNote0 = errCount > 20 ? `<li style="color:#888">… showing first 20 of ${errCount} errors</li>` : '';
       const errHtml  = errCount > 0
-        ? `<details class="mt-1"><summary style="cursor:pointer;color:#c00">${errCount} error(s) — click to expand</summary><ul style="font-size:.8rem;margin:.5rem 0 0 1rem">${data.errors.slice(0, 20).map(e => `<li>${escHtml(e)}</li>`).join('')}</ul></details>`
+        ? `<details class="mt-1"><summary style="cursor:pointer;color:#c00">${errCount} error(s) — click to expand</summary><ul style="font-size:.8rem;margin:.5rem 0 0 1rem">${errSlice0.map(e => `<li>${escHtml(e)}</li>`).join('')}${truncNote0}</ul></details>`
         : '';
-
-      if (resultDiv) {
-        resultDiv.innerHTML =
-          `<div class="alert alert-success" style="background:#d4edda;border:1px solid #c3e6cb;border-radius:4px;padding:.75rem 1rem">
-            ✅ <strong>${capitalise(type)}</strong> import complete —
             <strong>${data.imported}</strong> imported,
             <strong>${data.skipped}</strong> skipped${errCount > 0 ? `, <strong>${errCount}</strong> errors` : ''}.
             ${errHtml}
@@ -151,14 +148,15 @@ const Import = (() => {
       if (progressLabel) progressLabel.textContent = 'Import complete.';
 
       const errCount = Array.isArray(data.errors) ? data.errors.length : 0;
+      const errSlice1 = data.errors ? data.errors.slice(0, 20) : [];
+      const truncNote1 = errCount > 20 ? `<li style="color:#888">… showing first 20 of ${errCount} errors</li>` : '';
       const errHtml  = errCount > 0
-        ? `<details class="mt-1"><summary style="cursor:pointer;color:#c00">${errCount} error(s) — click to expand</summary><ul style="font-size:.8rem;margin:.5rem 0 0 1rem">${data.errors.slice(0, 20).map(e => `<li>${escHtml(e)}</li>`).join('')}</ul></details>`
+        ? `<details class="mt-1"><summary style="cursor:pointer;color:#c00">${errCount} error(s) — click to expand</summary><ul style="font-size:.8rem;margin:.5rem 0 0 1rem">${errSlice1.map(e => `<li>${escHtml(e)}</li>`).join('')}${truncNote1}</ul></details>`
         : '';
 
       if (resultDiv) {
         resultDiv.innerHTML =
           `<div class="alert alert-success" style="background:#d4edda;border:1px solid #c3e6cb;border-radius:4px;padding:.75rem 1rem">
-            ✅ <strong>${capitalise(type)}</strong> XML import complete —
             <strong>${data.imported}</strong> imported,
             <strong>${data.skipped}</strong> skipped${errCount > 0 ? `, <strong>${errCount}</strong> errors` : ''}.
             ${errHtml}

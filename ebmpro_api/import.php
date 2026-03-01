@@ -43,7 +43,8 @@ if ($ext !== $format) {
     jsonResponse(['success' => false, 'error' => "File extension must match format: .$format"], 422);
 }
 
-if ($_FILES['file']['size'] > 134217728) { // 128 MB limit
+define('MAX_IMPORT_FILE_SIZE', 134217728); // 128 MB
+if ($_FILES['file']['size'] > MAX_IMPORT_FILE_SIZE) {
     jsonResponse(['success' => false, 'error' => 'File exceeds 128 MB limit'], 422);
 }
 

@@ -169,6 +169,9 @@ try {
             if (!$id) jsonResponse(['success' => false, 'error' => 'id required'], 422);
             $quote = fetchQuoteFull($pdo, $id);
             if (!$quote) jsonResponse(['success' => false, 'error' => 'Quote not found'], 404);
+            if (!in_array($quote['status'], ['sent', 'accepted'], true)) {
+                jsonResponse(['success' => false, 'error' => 'Only sent or accepted quotes can be converted to invoices'], 422);
+            }
 
             // Get store code from store_id
             $storeRow = $pdo->prepare('SELECT code FROM stores WHERE id = ? LIMIT 1');

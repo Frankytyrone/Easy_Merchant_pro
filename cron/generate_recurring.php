@@ -11,12 +11,12 @@ require_once __DIR__ . '/../ebmpro_api/config.php';
 
 $cronSecret = defined('CRON_SECRET') ? CRON_SECRET : '';
 $apiUrl     = (defined('API_URL') ? API_URL : 'http://localhost/ebmpro_api')
-            . '/recurring.php?action=run_due&cron_secret=' . urlencode($cronSecret);
+            . '/recurring.php?action=run_due';
 
 $context = stream_context_create([
     'http' => [
         'method'  => 'POST',
-        'header'  => "Content-Type: application/json\r\n",
+        'header'  => "Content-Type: application/json\r\nX-Cron-Secret: " . $cronSecret . "\r\n",
         'content' => '{}',
         'timeout' => 30,
     ],
