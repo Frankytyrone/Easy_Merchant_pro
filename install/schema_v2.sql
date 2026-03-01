@@ -15,7 +15,6 @@ CREATE TABLE IF NOT EXISTS email_log (
   sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   opened_count INT DEFAULT 0,
   last_opened_at TIMESTAMP NULL,
-  opened_at DATETIME,
   status ENUM('sent','opened','bounced','failed') DEFAULT 'sent',
   tracking_token VARCHAR(64) UNIQUE,
   INDEX idx_invoice (invoice_id),

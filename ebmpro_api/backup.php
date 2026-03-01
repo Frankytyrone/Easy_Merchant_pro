@@ -53,21 +53,23 @@ switch ($action) {
             $dumpCmd   = null;
 
             if (function_exists('exec') || function_exists('shell_exec')) {
-                // Locate mysqldump binary
-                $candidates = ['/usr/bin/mysqldump', '/usr/local/bin/mysqldump', 'mysqldump'];
+                // Locate mysqldump binary (only from known paths, not arbitrary input)
+                $candidates = ['/usr/bin/mysqldump', '/usr/local/bin/mysqldump'];
                 foreach ($candidates as $bin) {
-                    $test = shell_exec("command -v " . escapeshellarg($bin) . " 2>/dev/null");
-                    if ($test) { $dumpCmd = $bin; break; }
+                    if (file_exists($bin) && is_executable($bin)) {
+                        $dumpCmd = $bin;
+                        break;
+                    }
                 }
             }
 
             if ($dumpCmd) {
                 $pwArg = defined('DB_PASS') && DB_PASS !== ''
-                    ? '-p' . escapeshellarg(DB_PASS)
+                    ? '--password=' . escapeshellarg(DB_PASS)
                     : '';
                 $cmd = sprintf(
                     '%s -h %s -u %s %s --single-transaction --routines --triggers %s > %s 2>&1',
-                    escapeshellcmd($dumpCmd),
+                    escapeshellarg($dumpCmd),
                     escapeshellarg(defined('DB_HOST') ? DB_HOST : 'localhost'),
                     escapeshellarg(defined('DB_USER') ? DB_USER : 'root'),
                     $pwArg,

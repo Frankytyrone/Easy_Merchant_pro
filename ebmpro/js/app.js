@@ -1040,7 +1040,7 @@ const App = (() => {
     const to    = (document.getElementById('reportDateTo')   || {}).value || '';
 
     const params = new URLSearchParams({ action: type });
-    if (store && store !== 'both') params.set('store', store.toUpperCase());
+    if (store && store.toLowerCase() !== 'both') params.set('store', store.toUpperCase());
     if (from)  params.set('from', from);
     if (to)    params.set('to',   to);
 
