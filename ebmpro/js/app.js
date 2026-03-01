@@ -229,12 +229,26 @@ const App = (() => {
 
   /* ── Reports ──────────────────────────────────────────────── */
   async function showReports() {
-    const dateFrom = document.getElementById('reportDateFrom');
-    const dateTo   = document.getElementById('reportDateTo');
+    // Pre-fill default date range (current month) if not already set
+    const dateFromEl = document.getElementById('reportDateFrom');
+    const dateToEl   = document.getElementById('reportDateTo');
+    if (dateFromEl && !dateFromEl.value) {
+      dateFromEl.value = new Date().toISOString().slice(0, 8) + '01';
+    }
+    if (dateToEl && !dateToEl.value) {
+      dateToEl.value = new Date().toISOString().slice(0, 10);
+    }
 
+    // If new report type control exists, use the new action-based API
+    if (document.getElementById('reportType')) {
+      await runReport();
+      return;
+    }
+
+    // Legacy fallback: dashboard stats
     const params = new URLSearchParams({ store_code: getCurrentStore() });
-    if (dateFrom && dateFrom.value) params.set('date_from', dateFrom.value);
-    if (dateTo   && dateTo.value)   params.set('date_to',   dateTo.value);
+    if (dateFromEl && dateFromEl.value) params.set('date_from', dateFromEl.value);
+    if (dateToEl   && dateToEl.value)   params.set('date_to',   dateToEl.value);
 
     const cards = {
       totalInvoiced:   document.getElementById('statTotalInvoiced'),
@@ -251,7 +265,6 @@ const App = (() => {
       if (cards.totalOutstanding) cards.totalOutstanding.textContent = fmtCur(data.total_outstanding || 0);
       if (cards.overdueCount)     cards.overdueCount.textContent     = data.overdue_count || 0;
 
-      // Render report invoice list
       const tbody = document.getElementById('reportInvoicesTbody');
       if (tbody && Array.isArray(data.invoices)) {
         tbody.innerHTML = data.invoices.map(inv => `
@@ -990,40 +1003,331 @@ const App = (() => {
     }
   }
 
-  /* ── Send Payment Link ────────────────────────────────────── */
+  /* ── Send Payment Link (legacy, kept for compat) ──────────── */
   async function sendPaymentLink() {
     const inv = typeof Invoice !== 'undefined' ? Invoice.getCurrent() : null;
     if (!inv || !inv.id) {
       showToast('Please save the invoice first before sending a payment link.', 'warning');
       return;
     }
-    if (parseFloat(inv.balance || inv.total || 0) <= 0) {
-      showToast('Invoice balance is zero — nothing to pay.', 'warning');
+    createPaymentLink(inv.id);
+  }
+
+  /* ── Create Payment Link ──────────────────────────────────── */
+  let _paymentLinkUrl = null;
+
+  async function createPaymentLink(invoiceId) {
+    const inv = typeof Invoice !== 'undefined' ? Invoice.getCurrent() : null;
+    const id  = invoiceId || (inv ? inv.id : null);
+
+    if (!id) {
+      showToast('Please save the invoice first.', 'warning');
       return;
     }
 
-    const btn = document.getElementById('btnPaymentLink');
+    const modal = document.getElementById('paymentLinkModal');
+    if (modal) {
+      const idEl = document.getElementById('paymentLinkInvoiceId');
+      if (idEl) idEl.value = id;
+
+      // Pre-fill amount from current invoice
+      if (inv && inv.id === id) {
+        const amtEl = document.getElementById('paymentLinkAmount');
+        if (amtEl) amtEl.value = parseFloat(inv.balance || inv.total || 0).toFixed(2);
+      }
+
+      const resultEl = document.getElementById('paymentLinkResult');
+      const copyBtn  = document.getElementById('btnCopyPaymentLink');
+      if (resultEl) { resultEl.textContent = ''; resultEl.classList.add('hidden'); }
+      if (copyBtn)  copyBtn.classList.add('hidden');
+      _paymentLinkUrl = null;
+
+      modal.classList.remove('hidden');
+      return;
+    }
+
+    // Fallback: direct generation without modal
+    await _doGeneratePaymentLink(id, null, 'stripe');
+  }
+
+  async function _doGeneratePaymentLink(invoiceId, amount, provider) {
+    const btn = document.getElementById('btnGeneratePaymentLink');
     if (btn) { btn.disabled = true; btn.textContent = '⏳ Generating…'; }
 
     try {
+      const payload = { invoice_id: invoiceId, provider };
+      if (amount) payload.amount = amount;
+
       const resp = await fetch('/ebmpro_api/create_payment_link.php', {
         method: 'POST',
         headers: Object.assign({ 'Content-Type': 'application/json' }, Auth.getAuthHeaders()),
-        body: JSON.stringify({ invoice_id: inv.id }),
+        body: JSON.stringify(payload),
       });
       const data = await resp.json();
       if (data.success && data.url) {
-        // Copy to clipboard and open
-        try { await navigator.clipboard.writeText(data.url); } catch { /* ignore */ }
-        showToast('Payment link generated and copied to clipboard!', 'success', 5000);
-        window.open(data.url, '_blank', 'noopener,noreferrer');
+        _paymentLinkUrl = data.url;
+        const resultEl = document.getElementById('paymentLinkResult');
+        if (resultEl) {
+          resultEl.innerHTML = '🔗 <a href="' + escHtml(data.url) + '" target="_blank" rel="noopener noreferrer">' + escHtml(data.url) + '</a>';
+          resultEl.classList.remove('hidden');
+        }
+        const copyBtn = document.getElementById('btnCopyPaymentLink');
+        if (copyBtn) copyBtn.classList.remove('hidden');
+        showToast('Payment link generated!', 'success');
       } else {
         showToast(data.error || 'Failed to generate payment link. Check payment settings.', 'danger');
       }
-    } catch (err) {
+    } catch {
       showToast('Network error — could not generate payment link.', 'danger');
     } finally {
-      if (btn) { btn.disabled = false; btn.textContent = '🔗 Send Payment Link'; }
+      if (btn) { btn.disabled = false; btn.textContent = '🔗 Generate Link'; }
+    }
+  }
+
+  async function copyPaymentLink() {
+    if (!_paymentLinkUrl) return;
+    try {
+      await navigator.clipboard.writeText(_paymentLinkUrl);
+      showToast('Payment link copied to clipboard!', 'success');
+    } catch {
+      showToast('Could not copy — please copy manually.', 'warning');
+    }
+  }
+
+  async function generatePaymentLinkFromModal() {
+    const invoiceId = parseInt(document.getElementById('paymentLinkInvoiceId')?.value || 0);
+    const amount    = parseFloat(document.getElementById('paymentLinkAmount')?.value  || 0) || null;
+    const provider  = document.querySelector('input[name="payment_provider"]:checked')?.value || 'stripe';
+    if (!invoiceId) {
+      showToast('No invoice selected.', 'warning');
+      return;
+    }
+    await _doGeneratePaymentLink(invoiceId, amount, provider);
+  }
+
+  /* ── runReport (action-based) ─────────────────────────────── */
+  let _lastReportData  = [];
+  let _lastReportType  = '';
+  let _lastReportCols  = [];
+
+  async function runReport() {
+    const type  = document.getElementById('reportType')?.value  || 'sales_summary';
+    const store = document.getElementById('reportStore')?.value || '';
+    const from  = document.getElementById('reportDateFrom')?.value || '';
+    const to    = document.getElementById('reportDateTo')?.value   || '';
+
+    const params = new URLSearchParams({ action: type });
+    if (store) params.set('store', store);
+    if (from)  params.set('from', from);
+    if (to)    params.set('to', to);
+
+    const tbody = document.getElementById('reportInvoicesTbody');
+    if (tbody) tbody.innerHTML = '<tr><td colspan="6" class="text-center"><span class="spinner"></span> Loading…</td></tr>';
+
+    try {
+      const resp = await fetch(`/ebmpro_api/reports.php?${params}`, { headers: Auth.getAuthHeaders() });
+      const data = await resp.json();
+
+      if (!data.success) {
+        showToast(data.error || 'Report failed.', 'danger');
+        return;
+      }
+
+      _lastReportType = type;
+      _renderReportResults(type, data);
+
+    } catch {
+      showToast('Failed to load report.', 'danger');
+    }
+  }
+
+  function _renderReportResults(type, data) {
+    const thead = document.querySelector('#reportResults thead tr');
+    const tbody = document.getElementById('reportInvoicesTbody');
+    if (!tbody) return;
+
+    if (type === 'sales_summary') {
+      const d = data.data || {};
+      if (thead) thead.innerHTML = '<th>Metric</th><th class="text-right">Value</th>';
+      _lastReportData = [
+        { metric: 'Invoice Count',     value: d.invoice_count      || 0 },
+        { metric: 'Total Sales',       value: fmtCur(d.total_sales  || 0) },
+        { metric: 'Total VAT',         value: fmtCur(d.total_vat    || 0) },
+        { metric: 'Total Paid',        value: fmtCur(d.total_paid   || 0) },
+        { metric: 'Total Outstanding', value: fmtCur(d.total_outstanding || 0) },
+        { metric: 'Avg Invoice Value', value: fmtCur(d.avg_invoice_value || 0) },
+      ];
+      _lastReportCols = ['metric', 'value'];
+      tbody.innerHTML = _lastReportData.map(r =>
+        `<tr><td>${escHtml(r.metric)}</td><td class="text-right">${escHtml(String(r.value))}</td></tr>`
+      ).join('');
+
+      // Update stat cards
+      const el = id => document.getElementById(id);
+      if (el('statTotalInvoiced'))    el('statTotalInvoiced').textContent    = fmtCur(data.data?.total_sales || 0);
+      if (el('statTotalPaid'))        el('statTotalPaid').textContent        = fmtCur(data.data?.total_paid  || 0);
+      if (el('statTotalOutstanding')) el('statTotalOutstanding').textContent = fmtCur(data.data?.total_outstanding || 0);
+      if (el('statOverdueCount'))     el('statOverdueCount').textContent     = data.data?.invoice_count || 0;
+
+    } else if (type === 'vat_summary') {
+      if (thead) thead.innerHTML = '<th>VAT Rate</th><th class="text-right">Net</th><th class="text-right">VAT</th><th class="text-right">Gross</th><th class="text-right">Invoices</th>';
+      _lastReportData = data.data || [];
+      _lastReportCols = ['vat_rate', 'net_total', 'vat_total', 'gross_total', 'invoice_count'];
+      tbody.innerHTML = _lastReportData.map(r =>
+        `<tr><td>${r.vat_rate}%</td><td class="text-right">${fmtCur(r.net_total)}</td><td class="text-right">${fmtCur(r.vat_total)}</td><td class="text-right">${fmtCur(r.gross_total)}</td><td class="text-right">${r.invoice_count}</td></tr>`
+      ).join('') || '<tr><td colspan="5" class="text-center text-muted">No data.</td></tr>';
+
+    } else if (type === 'sales_by_product') {
+      if (thead) thead.innerHTML = '<th>Code</th><th>Description</th><th class="text-right">Qty</th><th class="text-right">Revenue</th><th class="text-right">Invoices</th>';
+      _lastReportData = data.data || [];
+      _lastReportCols = ['product_code', 'description', 'total_qty', 'total_revenue', 'invoice_count'];
+      tbody.innerHTML = _lastReportData.map(r =>
+        `<tr><td>${escHtml(r.product_code||'')}</td><td>${escHtml(r.description||'')}</td><td class="text-right">${r.total_qty}</td><td class="text-right">${fmtCur(r.total_revenue)}</td><td class="text-right">${r.invoice_count}</td></tr>`
+      ).join('') || '<tr><td colspan="5" class="text-center text-muted">No data.</td></tr>';
+
+    } else if (type === 'sales_by_customer') {
+      if (thead) thead.innerHTML = '<th>Customer</th><th>Email</th><th class="text-right">Invoices</th><th class="text-right">Revenue</th><th class="text-right">Outstanding</th>';
+      _lastReportData = data.data || [];
+      _lastReportCols = ['customer_name', 'email_address', 'invoice_count', 'total_revenue', 'total_outstanding'];
+      tbody.innerHTML = _lastReportData.map(r =>
+        `<tr><td>${escHtml(r.customer_name||'')}</td><td>${escHtml(r.email_address||'')}</td><td class="text-right">${r.invoice_count}</td><td class="text-right">${fmtCur(r.total_revenue)}</td><td class="text-right">${fmtCur(r.total_outstanding)}</td></tr>`
+      ).join('') || '<tr><td colspan="5" class="text-center text-muted">No data.</td></tr>';
+
+    } else if (type === 'overdue') {
+      if (thead) thead.innerHTML = '<th>Invoice #</th><th>Customer</th><th>Due Date</th><th class="text-right">Total</th><th class="text-right">Balance</th><th>Days Overdue</th>';
+      _lastReportData = data.data || [];
+      _lastReportCols = ['invoice_number', 'customer_name', 'due_date', 'total', 'balance', 'days_overdue'];
+      tbody.innerHTML = _lastReportData.map(r =>
+        `<tr onclick="App.openInvoice('${r.id}')"><td>${escHtml(r.invoice_number||'')}</td><td>${escHtml(r.customer_name||'')}</td><td>${fmtDate(r.due_date)}</td><td class="text-right">${fmtCur(r.total)}</td><td class="text-right">${fmtCur(r.balance)}</td><td>${r.days_overdue} days</td></tr>`
+      ).join('') || '<tr><td colspan="6" class="text-center text-muted">No overdue invoices.</td></tr>';
+      if (document.getElementById('statOverdueCount')) document.getElementById('statOverdueCount').textContent = data.count || 0;
+
+    } else if (type === 'email_activity') {
+      if (thead) thead.innerHTML = '<th>Sent</th><th>To</th><th>Subject</th><th>Status</th>';
+      _lastReportData = data.data || [];
+      _lastReportCols = ['sent_at', 'to_email', 'subject', 'status'];
+      tbody.innerHTML = _lastReportData.map(r =>
+        `<tr><td>${fmtDate(r.sent_at)}</td><td>${escHtml(r.to_email||'')}</td><td>${escHtml(r.subject||'')}</td><td>${escHtml(r.status||'')}</td></tr>`
+      ).join('') || '<tr><td colspan="4" class="text-center text-muted">No email activity.</td></tr>';
+    }
+  }
+
+  /* ── exportReportCSV ──────────────────────────────────────── */
+  function exportReportCSV() {
+    if (!_lastReportData || !_lastReportData.length) {
+      showToast('Run a report first before exporting.', 'warning');
+      return;
+    }
+
+    const cols = _lastReportCols;
+    const header = cols.join(',');
+    const rows = _lastReportData.map(r =>
+      cols.map(c => {
+        const val = r[c] != null ? String(r[c]) : '';
+        return '"' + val.replace(/"/g, '""') + '"';
+      }).join(',')
+    );
+    const csv  = [header, ...rows].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = `report_${_lastReportType}_${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  /* ── openStatementModal ───────────────────────────────────── */
+  function openStatementModal(customerId) {
+    const modal = document.getElementById('statementModal');
+    if (!modal) {
+      showToast('Statement modal not available.', 'warning');
+      return;
+    }
+
+    const idEl = document.getElementById('statementCustomerId');
+    if (idEl) idEl.value = customerId;
+
+    // Pre-fill last 30 days
+    const today = new Date();
+    const from  = new Date(today);
+    from.setDate(from.getDate() - 30);
+
+    const fromEl = document.getElementById('statementFrom');
+    const toEl   = document.getElementById('statementTo');
+    if (fromEl) fromEl.value = from.toISOString().slice(0, 10);
+    if (toEl)   toEl.value   = today.toISOString().slice(0, 10);
+
+    // Clear preview
+    const tbody = document.getElementById('statementPreviewTbody');
+    if (tbody) tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Click Preview to load invoices.</td></tr>';
+
+    modal.classList.remove('hidden');
+  }
+
+  /* ── sendStatement ────────────────────────────────────────── */
+  async function sendStatement(doSend = false) {
+    const customerId = parseInt(document.getElementById('statementCustomerId')?.value || 0);
+    const from       = document.getElementById('statementFrom')?.value || '';
+    const to         = document.getElementById('statementTo')?.value   || '';
+
+    if (!customerId) {
+      showToast('No customer selected.', 'warning');
+      return;
+    }
+
+    const btn = document.getElementById('btnSendStatement');
+    if (doSend && btn) { btn.disabled = true; btn.textContent = '⏳ Sending…'; }
+
+    try {
+      const resp = await fetch('/ebmpro_api/statements.php', {
+        method: 'POST',
+        headers: Object.assign({ 'Content-Type': 'application/json' }, Auth.getAuthHeaders()),
+        body: JSON.stringify({
+          customer_id: customerId,
+          from,
+          to,
+          send_email: doSend,
+        }),
+      });
+      const data = await resp.json();
+
+      if (!data.success) {
+        showToast(data.error || 'Statement failed.', 'danger');
+        return;
+      }
+
+      if (doSend) {
+        closeModal('statementModal');
+        showToast('✅ Statement sent successfully!', 'success');
+        return;
+      }
+
+      // Preview mode — render invoices in the preview table
+      const invoices = data.data?.invoices || [];
+      const tbody    = document.getElementById('statementPreviewTbody');
+      if (tbody) {
+        if (!invoices.length) {
+          tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No invoices in this period.</td></tr>';
+        } else {
+          tbody.innerHTML = invoices.map(inv => `
+            <tr>
+              <td>${fmtDate(inv.invoice_date)}</td>
+              <td>${escHtml(inv.invoice_number || '')}</td>
+              <td>${escHtml((inv.status || '').replace('_', ' ').toUpperCase())}</td>
+              <td class="text-right">${fmtCur(inv.total)}</td>
+              <td class="text-right">${fmtCur(inv.balance)}</td>
+              <td class="text-right"><strong>${fmtCur(inv.running_balance)}</strong></td>
+            </tr>
+          `).join('');
+        }
+      }
+    } catch {
+      showToast('Failed to load statement.', 'danger');
+    } finally {
+      if (doSend && btn) { btn.disabled = false; btn.textContent = '📧 Send Statement'; }
     }
   }
 
@@ -1054,6 +1358,13 @@ const App = (() => {
     downloadCurrentPDF,
     saveCurrentInvoice,
     sendPaymentLink,
+    createPaymentLink,
+    copyPaymentLink,
+    generatePaymentLinkFromModal,
+    runReport,
+    exportReportCSV,
+    openStatementModal,
+    sendStatement,
     showToast,
     updateHeaderUser,
     toast: showToast,
