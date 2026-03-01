@@ -36,6 +36,9 @@ const App = (() => {
       case 'settingsScreen': showSettings();         break;
       case 'adminScreen':    loadAdminDashboard();   break;
       case 'stockScreen':    loadStock();            break;
+      case 'quotesScreen':   loadQuotes();           break;
+      case 'recurringScreen': loadRecurring();       break;
+      case 'expensesScreen': loadExpenses();         break;
     }
   }
 
@@ -1385,6 +1388,582 @@ const App = (() => {
 
   document.addEventListener('DOMContentLoaded', init);
 
+  /* ══════════════════════════════════════════════════════════
+     QUOTES
+  ══════════════════════════════════════════════════════════ */
+
+  async function loadQuotes() {
+    const tbody   = document.getElementById('quotesTbody');
+    const filter  = document.getElementById('quotesStatusFilter');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="7" class="text-center"><span class="spinner"></span> Loading…</td></tr>';
+    try {
+      const params = new URLSearchParams({ store_id: getCurrentStore() === 'FAL' ? 1 : 2 });
+      if (filter && filter.value) params.set('status', filter.value);
+      const resp = await fetch(`/ebmpro_api/quotes.php?${params}`, { headers: Auth.getAuthHeaders() });
+      const data = await resp.json();
+      const list = data.data || [];
+      if (!list.length) {
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No quotes found.</td></tr>';
+        return;
+      }
+      const statusColors = { draft:'#9e9e9e', sent:'#2196f3', accepted:'#4caf50', declined:'#f44336', expired:'#ff9800' };
+      tbody.innerHTML = list.map(q => {
+        const color = statusColors[q.status] || '#9e9e9e';
+        return `<tr>
+          <td><strong>${escHtml(q.quote_number || '—')}</strong></td>
+          <td>${escHtml(q.customer_name || '—')}</td>
+          <td>${fmtDate(q.quote_date)}</td>
+          <td>${fmtDate(q.expiry_date)}</td>
+          <td class="text-right">${fmtCur(q.total)}</td>
+          <td><span style="display:inline-block;padding:.2rem .5rem;border-radius:4px;font-size:.8rem;font-weight:600;background:${color}22;color:${color};border:1px solid ${color}44">${escHtml(q.status.toUpperCase())}</span></td>
+          <td style="white-space:nowrap">
+            ${q.status === 'draft' ? `<button class="btn btn-sm btn-light" onclick="App.openQuoteModal(${q.id})">✏️</button> ` : ''}
+            ${q.status === 'draft' || q.status === 'sent' ? `<button class="btn btn-sm btn-light" onclick="App.sendQuote(${q.id})">📧</button> ` : ''}
+            <button class="btn btn-sm btn-light" onclick="App.convertQuoteToInvoice(${q.id})" title="Convert to Invoice">🔄</button>
+            ${q.status === 'draft' ? `<button class="btn btn-sm btn-light" onclick="App.deleteQuote(${q.id})" style="color:#f44336">🗑️</button>` : ''}
+          </td>
+        </tr>`;
+      }).join('');
+    } catch {
+      tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">Failed to load quotes.</td></tr>';
+    }
+  }
+
+  function openQuoteModal(id = null) {
+    const today = new Date().toISOString().slice(0, 10);
+    const expiry = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
+    document.getElementById('quoteId').value          = id || '';
+    document.getElementById('quoteCustomerSearch').value = '';
+    document.getElementById('quoteCustomerId').value  = '';
+    document.getElementById('quoteDate').value         = today;
+    document.getElementById('quoteExpiryDate').value   = expiry;
+    document.getElementById('quoteNotes').value        = '';
+    document.getElementById('quoteItemsWrap').innerHTML = `
+      <div class="quote-item-row" style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr auto;gap:.4rem;align-items:end;margin-bottom:.4rem">
+        <input type="text" class="form-control" placeholder="Description *" name="qi_desc" aria-label="Description">
+        <input type="number" class="form-control" placeholder="Qty" name="qi_qty" value="1" min="0.001" step="0.001" aria-label="Quantity">
+        <input type="number" class="form-control" placeholder="Unit Price" name="qi_price" min="0" step="0.01" aria-label="Unit price">
+        <input type="number" class="form-control" placeholder="VAT%" name="qi_vat" value="23" min="0" step="0.01" aria-label="VAT rate">
+        <button class="btn btn-light btn-sm" onclick="this.closest('.quote-item-row').remove()" aria-label="Remove item">✕</button>
+      </div>`;
+    document.getElementById('quoteModalTitle').textContent = id ? '📋 Edit Quote' : '📋 New Quote';
+    document.getElementById('quoteModal').classList.remove('hidden');
+
+    if (id) {
+      fetch(`/ebmpro_api/quotes.php?id=${id}`, { headers: Auth.getAuthHeaders() })
+        .then(r => r.json()).then(data => {
+          const q = data.data;
+          if (!q) return;
+          document.getElementById('quoteCustomerSearch').value = q.customer_name || '';
+          document.getElementById('quoteCustomerId').value  = q.customer_id;
+          document.getElementById('quoteDate').value        = q.quote_date || today;
+          document.getElementById('quoteExpiryDate').value  = q.expiry_date || expiry;
+          document.getElementById('quoteNotes').value       = q.notes || '';
+          if (q.items && q.items.length) {
+            document.getElementById('quoteItemsWrap').innerHTML = q.items.map(item => `
+              <div class="quote-item-row" style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr auto;gap:.4rem;align-items:end;margin-bottom:.4rem">
+                <input type="text" class="form-control" placeholder="Description *" name="qi_desc" value="${escHtml(item.description)}" aria-label="Description">
+                <input type="number" class="form-control" placeholder="Qty" name="qi_qty" value="${item.quantity}" min="0.001" step="0.001" aria-label="Quantity">
+                <input type="number" class="form-control" placeholder="Unit Price" name="qi_price" value="${item.unit_price}" min="0" step="0.01" aria-label="Unit price">
+                <input type="number" class="form-control" placeholder="VAT%" name="qi_vat" value="${item.vat_rate}" min="0" step="0.01" aria-label="VAT rate">
+                <button class="btn btn-light btn-sm" onclick="this.closest('.quote-item-row').remove()" aria-label="Remove item">✕</button>
+              </div>`).join('');
+          }
+        }).catch(() => {});
+    }
+  }
+
+  function addQuoteItemRow() {
+    const wrap = document.getElementById('quoteItemsWrap');
+    if (!wrap) return;
+    const row = document.createElement('div');
+    row.className = 'quote-item-row';
+    row.style.cssText = 'display:grid;grid-template-columns:2fr 1fr 1fr 1fr auto;gap:.4rem;align-items:end;margin-bottom:.4rem';
+    row.innerHTML = `
+      <input type="text" class="form-control" placeholder="Description *" name="qi_desc" aria-label="Description">
+      <input type="number" class="form-control" placeholder="Qty" name="qi_qty" value="1" min="0.001" step="0.001" aria-label="Quantity">
+      <input type="number" class="form-control" placeholder="Unit Price" name="qi_price" min="0" step="0.01" aria-label="Unit price">
+      <input type="number" class="form-control" placeholder="VAT%" name="qi_vat" value="23" min="0" step="0.01" aria-label="VAT rate">
+      <button class="btn btn-light btn-sm" onclick="this.closest('.quote-item-row').remove()" aria-label="Remove item">✕</button>`;
+    wrap.appendChild(row);
+  }
+
+  async function saveQuote() {
+    const id         = document.getElementById('quoteId').value;
+    const customerId = document.getElementById('quoteCustomerId').value;
+    const storeId    = document.getElementById('quoteStoreId').value;
+    const quoteDate  = document.getElementById('quoteDate').value;
+    if (!customerId) { showToast('Please select a customer.', 'danger'); return; }
+    if (!quoteDate)  { showToast('Quote date is required.', 'danger'); return; }
+
+    const rows  = document.querySelectorAll('#quoteItemsWrap .quote-item-row');
+    const items = [];
+    for (const row of rows) {
+      const desc  = row.querySelector('[name=qi_desc]').value.trim();
+      const qty   = parseFloat(row.querySelector('[name=qi_qty]').value) || 1;
+      const price = parseFloat(row.querySelector('[name=qi_price]').value) || 0;
+      const vat   = parseFloat(row.querySelector('[name=qi_vat]').value) || 23;
+      if (!desc) continue;
+      items.push({ description: desc, qty, unit_price: price, vat_rate: vat });
+    }
+    if (!items.length) { showToast('Add at least one line item.', 'danger'); return; }
+
+    const body = {
+      customer_id:  parseInt(customerId),
+      store_id:     parseInt(storeId),
+      quote_date:   quoteDate,
+      expiry_date:  document.getElementById('quoteExpiryDate').value || null,
+      notes:        document.getElementById('quoteNotes').value || null,
+      items,
+    };
+
+    const btn = document.getElementById('btnSaveQuote');
+    if (btn) btn.disabled = true;
+    try {
+      const url    = id ? `/ebmpro_api/quotes.php?id=${id}` : '/ebmpro_api/quotes.php';
+      const method = id ? 'PUT' : 'POST';
+      const resp   = await fetch(url, {
+        method,
+        headers: { ...Auth.getAuthHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await resp.json();
+      if (!data.success) throw new Error(data.error || 'Save failed');
+      closeModal('quoteModal');
+      showToast('Quote saved!', 'success');
+      loadQuotes();
+    } catch (err) {
+      showToast(err.message || 'Failed to save quote.', 'danger');
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  async function sendQuote(id) {
+    if (!confirm('Send this quote by email to the customer?')) return;
+    try {
+      const resp = await fetch(`/ebmpro_api/quotes.php?action=send&id=${id}`, {
+        method: 'POST',
+        headers: Auth.getAuthHeaders(),
+      });
+      const data = await resp.json();
+      if (!data.success) throw new Error(data.error || 'Send failed');
+      showToast('Quote sent!', 'success');
+      loadQuotes();
+    } catch (err) {
+      showToast(err.message || 'Failed to send quote.', 'danger');
+    }
+  }
+
+  async function convertQuoteToInvoice(id) {
+    if (!confirm('Convert this quote to an invoice?')) return;
+    try {
+      const resp = await fetch(`/ebmpro_api/quotes.php?action=convert&id=${id}`, {
+        method: 'POST',
+        headers: Auth.getAuthHeaders(),
+      });
+      const data = await resp.json();
+      if (!data.success) throw new Error(data.error || 'Convert failed');
+      showToast(`Converted! Invoice ${data.invoice_number} created.`, 'success');
+      loadQuotes();
+    } catch (err) {
+      showToast(err.message || 'Failed to convert quote.', 'danger');
+    }
+  }
+
+  async function deleteQuote(id) {
+    if (!confirm('Delete this draft quote?')) return;
+    try {
+      const resp = await fetch(`/ebmpro_api/quotes.php?id=${id}`, {
+        method: 'DELETE',
+        headers: Auth.getAuthHeaders(),
+      });
+      const data = await resp.json();
+      if (!data.success) throw new Error(data.error || 'Delete failed');
+      showToast('Quote deleted.', 'info');
+      loadQuotes();
+    } catch (err) {
+      showToast(err.message || 'Failed to delete quote.', 'danger');
+    }
+  }
+
+  /* ══════════════════════════════════════════════════════════
+     RECURRING INVOICES
+  ══════════════════════════════════════════════════════════ */
+
+  async function loadRecurring() {
+    const tbody = document.getElementById('recurringTbody');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="6" class="text-center"><span class="spinner"></span> Loading…</td></tr>';
+    try {
+      const resp = await fetch('/ebmpro_api/recurring.php', { headers: Auth.getAuthHeaders() });
+      const data = await resp.json();
+      const list = data.data || [];
+      if (!list.length) {
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No recurring invoices found.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = list.map(r => `<tr>
+        <td>${escHtml(r.customer_name || '—')}</td>
+        <td>${escHtml(r.frequency || '—')}</td>
+        <td>${fmtDate(r.next_run_date)}</td>
+        <td>${fmtDate(r.last_run_date)}</td>
+        <td>
+          <button class="btn btn-sm ${r.active ? 'btn-accent' : 'btn-light'}"
+            onclick="App.toggleRecurring(${r.id})">${r.active ? '✅ Active' : '⏸ Paused'}</button>
+        </td>
+        <td style="white-space:nowrap">
+          <button class="btn btn-sm btn-light" onclick="App.openRecurringModal(${r.id})">✏️</button>
+          <button class="btn btn-sm btn-light" onclick="App.deleteRecurring(${r.id})" style="color:#f44336">🗑️</button>
+        </td>
+      </tr>`).join('');
+    } catch {
+      tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Failed to load.</td></tr>';
+    }
+  }
+
+  function openRecurringModal(id = null) {
+    const today = new Date().toISOString().slice(0, 10);
+    document.getElementById('recurringId').value             = id || '';
+    document.getElementById('recurringCustomerSearch').value = '';
+    document.getElementById('recurringCustomerId').value     = '';
+    document.getElementById('recurringFrequency').value      = 'monthly';
+    document.getElementById('recurringNextRun').value        = today;
+    document.getElementById('recurringNotes').value          = '';
+    document.getElementById('recurringItemsWrap').innerHTML  = `
+      <div class="recurring-item-row" style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr auto;gap:.4rem;align-items:end;margin-bottom:.4rem">
+        <input type="text" class="form-control" placeholder="Description *" name="ri_desc" aria-label="Description">
+        <input type="number" class="form-control" placeholder="Qty" name="ri_qty" value="1" min="0.001" step="0.001" aria-label="Quantity">
+        <input type="number" class="form-control" placeholder="Unit Price" name="ri_price" min="0" step="0.01" aria-label="Unit price">
+        <input type="number" class="form-control" placeholder="VAT%" name="ri_vat" value="23" min="0" step="0.01" aria-label="VAT rate">
+        <button class="btn btn-light btn-sm" onclick="this.closest('.recurring-item-row').remove()" aria-label="Remove item">✕</button>
+      </div>`;
+    document.getElementById('recurringModalTitle').textContent = id ? '🔄 Edit Recurring Invoice' : '🔄 New Recurring Invoice';
+    document.getElementById('recurringModal').classList.remove('hidden');
+
+    if (id) {
+      fetch(`/ebmpro_api/recurring.php?id=${id}`, { headers: Auth.getAuthHeaders() })
+        .then(r => r.json()).then(data => {
+          const tpl = data.data;
+          if (!tpl) return;
+          document.getElementById('recurringCustomerSearch').value = tpl.customer_name || '';
+          document.getElementById('recurringCustomerId').value     = tpl.customer_id;
+          document.getElementById('recurringFrequency').value      = tpl.frequency;
+          document.getElementById('recurringNextRun').value        = tpl.next_run_date || today;
+          document.getElementById('recurringNotes').value          = tpl.notes || '';
+          if (tpl.items && tpl.items.length) {
+            document.getElementById('recurringItemsWrap').innerHTML = tpl.items.map(item => `
+              <div class="recurring-item-row" style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr auto;gap:.4rem;align-items:end;margin-bottom:.4rem">
+                <input type="text" class="form-control" placeholder="Description *" name="ri_desc" value="${escHtml(item.description)}" aria-label="Description">
+                <input type="number" class="form-control" placeholder="Qty" name="ri_qty" value="${item.quantity}" min="0.001" step="0.001" aria-label="Quantity">
+                <input type="number" class="form-control" placeholder="Unit Price" name="ri_price" value="${item.unit_price}" min="0" step="0.01" aria-label="Unit price">
+                <input type="number" class="form-control" placeholder="VAT%" name="ri_vat" value="${item.vat_rate}" min="0" step="0.01" aria-label="VAT rate">
+                <button class="btn btn-light btn-sm" onclick="this.closest('.recurring-item-row').remove()" aria-label="Remove item">✕</button>
+              </div>`).join('');
+          }
+        }).catch(() => {});
+    }
+  }
+
+  function addRecurringItemRow() {
+    const wrap = document.getElementById('recurringItemsWrap');
+    if (!wrap) return;
+    const row = document.createElement('div');
+    row.className = 'recurring-item-row';
+    row.style.cssText = 'display:grid;grid-template-columns:2fr 1fr 1fr 1fr auto;gap:.4rem;align-items:end;margin-bottom:.4rem';
+    row.innerHTML = `
+      <input type="text" class="form-control" placeholder="Description *" name="ri_desc" aria-label="Description">
+      <input type="number" class="form-control" placeholder="Qty" name="ri_qty" value="1" min="0.001" step="0.001" aria-label="Quantity">
+      <input type="number" class="form-control" placeholder="Unit Price" name="ri_price" min="0" step="0.01" aria-label="Unit price">
+      <input type="number" class="form-control" placeholder="VAT%" name="ri_vat" value="23" min="0" step="0.01" aria-label="VAT rate">
+      <button class="btn btn-light btn-sm" onclick="this.closest('.recurring-item-row').remove()" aria-label="Remove item">✕</button>`;
+    wrap.appendChild(row);
+  }
+
+  async function saveRecurring() {
+    const id         = document.getElementById('recurringId').value;
+    const customerId = document.getElementById('recurringCustomerId').value;
+    const storeId    = document.getElementById('recurringStoreId').value;
+    const frequency  = document.getElementById('recurringFrequency').value;
+    const nextRun    = document.getElementById('recurringNextRun').value;
+    if (!customerId) { showToast('Please select a customer.', 'danger'); return; }
+    if (!nextRun)    { showToast('Next run date is required.', 'danger'); return; }
+
+    const rows  = document.querySelectorAll('#recurringItemsWrap .recurring-item-row');
+    const items = [];
+    for (const row of rows) {
+      const desc  = row.querySelector('[name=ri_desc]').value.trim();
+      const qty   = parseFloat(row.querySelector('[name=ri_qty]').value) || 1;
+      const price = parseFloat(row.querySelector('[name=ri_price]').value) || 0;
+      const vat   = parseFloat(row.querySelector('[name=ri_vat]').value) || 23;
+      if (!desc) continue;
+      items.push({ description: desc, quantity: qty, unit_price: price, vat_rate: vat });
+    }
+    if (!items.length) { showToast('Add at least one line item.', 'danger'); return; }
+
+    const body = {
+      customer_id:    parseInt(customerId),
+      store_id:       parseInt(storeId),
+      frequency,
+      next_run_date:  nextRun,
+      notes:          document.getElementById('recurringNotes').value || null,
+      items,
+    };
+
+    const btn = document.getElementById('btnSaveRecurring');
+    if (btn) btn.disabled = true;
+    try {
+      const url    = id ? `/ebmpro_api/recurring.php?id=${id}` : '/ebmpro_api/recurring.php';
+      const method = id ? 'PUT' : 'POST';
+      const resp   = await fetch(url, {
+        method,
+        headers: { ...Auth.getAuthHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await resp.json();
+      if (!data.success) throw new Error(data.error || 'Save failed');
+      closeModal('recurringModal');
+      showToast('Recurring invoice saved!', 'success');
+      loadRecurring();
+    } catch (err) {
+      showToast(err.message || 'Failed to save.', 'danger');
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  async function toggleRecurring(id) {
+    try {
+      const resp = await fetch(`/ebmpro_api/recurring.php?action=toggle&id=${id}`, {
+        method: 'POST',
+        headers: Auth.getAuthHeaders(),
+      });
+      const data = await resp.json();
+      if (!data.success) throw new Error(data.error || 'Toggle failed');
+      loadRecurring();
+    } catch (err) {
+      showToast(err.message || 'Failed to toggle.', 'danger');
+    }
+  }
+
+  async function deleteRecurring(id) {
+    if (!confirm('Delete this recurring invoice template?')) return;
+    try {
+      const resp = await fetch(`/ebmpro_api/recurring.php?id=${id}`, {
+        method: 'DELETE',
+        headers: Auth.getAuthHeaders(),
+      });
+      const data = await resp.json();
+      if (!data.success) throw new Error(data.error || 'Delete failed');
+      showToast('Template deleted.', 'info');
+      loadRecurring();
+    } catch (err) {
+      showToast(err.message || 'Failed to delete.', 'danger');
+    }
+  }
+
+  /* ══════════════════════════════════════════════════════════
+     EXPENSES
+  ══════════════════════════════════════════════════════════ */
+
+  async function loadExpenses() {
+    const tbody = document.getElementById('expensesTbody');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="7" class="text-center"><span class="spinner"></span> Loading…</td></tr>';
+    try {
+      const params = new URLSearchParams({ store_id: getCurrentStore() === 'FAL' ? 1 : 2 });
+      const cat  = document.getElementById('expensesCategoryFilter');
+      const from = document.getElementById('expensesFrom');
+      const to   = document.getElementById('expensesTo');
+      if (cat  && cat.value)  params.set('category', cat.value);
+      if (from && from.value) params.set('from', from.value);
+      if (to   && to.value)   params.set('to',   to.value);
+      const resp = await fetch(`/ebmpro_api/expenses.php?${params}`, { headers: Auth.getAuthHeaders() });
+      const data = await resp.json();
+      const list = data.data || [];
+      const totalEl = document.getElementById('expensesMonthTotalVal');
+      if (totalEl) totalEl.textContent = fmtCur(data.month_total || 0);
+      if (!list.length) {
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No expenses found.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = list.map(e => `<tr>
+        <td>${fmtDate(e.expense_date)}</td>
+        <td>${escHtml(e.category || '—')}</td>
+        <td>${escHtml(e.description || '—')}</td>
+        <td>${escHtml(e.supplier || '—')}</td>
+        <td class="text-right">${fmtCur(e.amount)}</td>
+        <td class="text-right">${fmtCur(e.vat_amount)}</td>
+        <td style="white-space:nowrap">
+          <button class="btn btn-sm btn-light" onclick="App.openExpenseModal(${e.id})">✏️</button>
+          <button class="btn btn-sm btn-light" onclick="App.deleteExpense(${e.id})" style="color:#f44336">🗑️</button>
+        </td>
+      </tr>`).join('');
+    } catch {
+      tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">Failed to load expenses.</td></tr>';
+    }
+  }
+
+  function openExpenseModal(id = null) {
+    const today = new Date().toISOString().slice(0, 10);
+    document.getElementById('expenseId').value          = id || '';
+    document.getElementById('expenseDate').value         = today;
+    document.getElementById('expenseCategory').value     = 'Materials';
+    document.getElementById('expenseAmount').value       = '';
+    document.getElementById('expenseDescription').value  = '';
+    document.getElementById('expenseSupplier').value     = '';
+    document.getElementById('expenseReceiptRef').value   = '';
+    document.getElementById('expenseVatRate').value      = '0';
+    document.getElementById('expenseVatAmount').value    = '0';
+    document.getElementById('expenseModalTitle').textContent = id ? '💸 Edit Expense' : '💸 Add Expense';
+    document.getElementById('expenseModal').classList.remove('hidden');
+
+    if (id) {
+      fetch(`/ebmpro_api/expenses.php?id=${id}`, { headers: Auth.getAuthHeaders() })
+        .then(r => r.json()).then(data => {
+          const e = data.data;
+          if (!e) return;
+          document.getElementById('expenseDate').value        = e.expense_date || today;
+          document.getElementById('expenseCategory').value    = e.category || 'Materials';
+          document.getElementById('expenseAmount').value      = e.amount || '';
+          document.getElementById('expenseDescription').value = e.description || '';
+          document.getElementById('expenseSupplier').value    = e.supplier || '';
+          document.getElementById('expenseReceiptRef').value  = e.receipt_ref || '';
+          document.getElementById('expenseVatRate').value     = e.vat_rate || '0';
+          document.getElementById('expenseVatAmount').value   = e.vat_amount || '0';
+          const storeEl = document.getElementById('expenseStoreId');
+          if (storeEl && e.store_id) storeEl.value = e.store_id;
+        }).catch(() => {});
+    }
+  }
+
+  async function saveExpense() {
+    const id     = document.getElementById('expenseId').value;
+    const amount = document.getElementById('expenseAmount').value;
+    const desc   = document.getElementById('expenseDescription').value.trim();
+    if (!amount || parseFloat(amount) <= 0) { showToast('Amount is required.', 'danger'); return; }
+    if (!desc) { showToast('Description is required.', 'danger'); return; }
+
+    const body = {
+      store_id:     parseInt(document.getElementById('expenseStoreId').value),
+      expense_date: document.getElementById('expenseDate').value,
+      category:     document.getElementById('expenseCategory').value,
+      description:  desc,
+      amount:       parseFloat(amount),
+      vat_rate:     parseFloat(document.getElementById('expenseVatRate').value) || 0,
+      vat_amount:   parseFloat(document.getElementById('expenseVatAmount').value) || 0,
+      supplier:     document.getElementById('expenseSupplier').value || null,
+      receipt_ref:  document.getElementById('expenseReceiptRef').value || null,
+    };
+
+    const btn = document.getElementById('btnSaveExpense');
+    if (btn) btn.disabled = true;
+    try {
+      const url    = id ? `/ebmpro_api/expenses.php?id=${id}` : '/ebmpro_api/expenses.php';
+      const method = id ? 'PUT' : 'POST';
+      const resp   = await fetch(url, {
+        method,
+        headers: { ...Auth.getAuthHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await resp.json();
+      if (!data.success) throw new Error(data.error || 'Save failed');
+      closeModal('expenseModal');
+      showToast('Expense saved!', 'success');
+      loadExpenses();
+    } catch (err) {
+      showToast(err.message || 'Failed to save expense.', 'danger');
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  async function deleteExpense(id) {
+    if (!confirm('Delete this expense?')) return;
+    try {
+      const resp = await fetch(`/ebmpro_api/expenses.php?id=${id}`, {
+        method: 'DELETE',
+        headers: Auth.getAuthHeaders(),
+      });
+      const data = await resp.json();
+      if (!data.success) throw new Error(data.error || 'Delete failed');
+      showToast('Expense deleted.', 'info');
+      loadExpenses();
+    } catch (err) {
+      showToast(err.message || 'Failed to delete.', 'danger');
+    }
+  }
+
+  /* ══════════════════════════════════════════════════════════
+     UNIFIED IMPORT (CSV / XML)
+  ══════════════════════════════════════════════════════════ */
+
+  function updateXmlImportAccept() {
+    const fmt   = document.getElementById('xmlImportFormat');
+    const input = document.getElementById('xmlImportFile');
+    if (!fmt || !input) return;
+    input.accept = fmt.value === 'xml' ? '.xml' : '.csv';
+  }
+
+  async function runUnifiedImport() {
+    const typeEl   = document.getElementById('xmlImportType');
+    const fmtEl    = document.getElementById('xmlImportFormat');
+    const fileEl   = document.getElementById('xmlImportFile');
+    const resultEl = document.getElementById('xmlImportResult');
+    if (!typeEl || !fmtEl || !fileEl) return;
+    if (!fileEl.files || !fileEl.files[0]) {
+      showToast('Please select a file to import.', 'danger');
+      return;
+    }
+    const formData = new FormData();
+    formData.append('file', fileEl.files[0]);
+    formData.append('type', typeEl.value);
+    formData.append('format', fmtEl.value);
+    try {
+      const resp = await fetch(
+        `/ebmpro_api/import.php?type=${encodeURIComponent(typeEl.value)}&format=${encodeURIComponent(fmtEl.value)}`,
+        { method: 'POST', headers: Auth.getAuthHeaders(), body: formData }
+      );
+      const data = await resp.json();
+      if (resultEl) {
+        resultEl.classList.remove('hidden');
+        const color = data.success ? '#4caf50' : '#f44336';
+        resultEl.style.cssText = `padding:.75rem;border-radius:6px;border-left:3px solid ${color};background:${color}11;font-size:.9rem`;
+        let html = `<strong>${escHtml(data.message || (data.success ? 'Done' : data.error || 'Error'))}</strong>`;
+        if (data.errors && data.errors.length) {
+          html += '<ul style="margin:.5rem 0 0;padding-left:1.2rem;font-size:.82rem">' +
+            data.errors.slice(0, 5).map(e => `<li>${escHtml(e)}</li>`).join('') +
+            (data.errors.length > 5 ? `<li>… and ${data.errors.length - 5} more</li>` : '') +
+            '</ul>';
+        }
+        resultEl.innerHTML = html;
+      }
+    } catch (err) {
+      showToast(err.message || 'Import failed.', 'danger');
+    }
+  }
+
+  function downloadXmlSample(type) {
+    let xml, filename;
+    if (type === 'products') {
+      xml = `<?xml version="1.0" encoding="UTF-8"?>\n<products>\n  <product>\n    <name>Widget A</name>\n    <sku>WID-001</sku>\n    <price>9.99</price>\n    <vat_rate>23</vat_rate>\n    <stock_quantity>100</stock_quantity>\n    <description>Optional description</description>\n  </product>\n</products>`;
+      filename = 'sample_products.xml';
+    } else {
+      xml = `<?xml version="1.0" encoding="UTF-8"?>\n<customers>\n  <customer>\n    <name>John Smith</name>\n    <email>john@example.com</email>\n    <phone>0871234567</phone>\n    <address>123 Main St</address>\n    <town>Dublin</town>\n    <county>Dublin</county>\n    <eircode>D01 AB12</eircode>\n  </customer>\n</customers>`;
+      filename = 'sample_customers.xml';
+    }
+    const blob = new Blob([xml], { type: 'application/xml' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
   return {
     showScreen,
     getCurrentStore,
@@ -1440,5 +2019,29 @@ const App = (() => {
     openAdjustStockModal,
     saveStockAdjust,
     adjustStock,
+    // Quotes
+    loadQuotes,
+    openQuoteModal,
+    addQuoteItemRow,
+    saveQuote,
+    sendQuote,
+    convertQuoteToInvoice,
+    deleteQuote,
+    // Recurring
+    loadRecurring,
+    openRecurringModal,
+    addRecurringItemRow,
+    saveRecurring,
+    toggleRecurring,
+    deleteRecurring,
+    // Expenses
+    loadExpenses,
+    openExpenseModal,
+    saveExpense,
+    deleteExpense,
+    // Unified import
+    runUnifiedImport,
+    updateXmlImportAccept,
+    downloadXmlSample,
   };
 })();
