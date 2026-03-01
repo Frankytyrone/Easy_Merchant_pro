@@ -57,54 +57,79 @@ try {
     // POST — trigger reminder for a specific invoice
     // ════════════════════════════════════════════════════════════════════════
     if ($method === 'POST') {
-        $body      = json_decode(file_get_contents('php://input'), true) ?? [];
+        $body = json_decode(file_get_contents('php://input'), true) ?? [];
+
+        // ── Helper: send a reminder for one invoice ───────────────────────
+        $sendOneReminder = function (int $invoiceId) use ($pdo, $auth): array {
+            $stmt = $pdo->prepare(
+                'SELECT i.*, c.company_name AS customer_name, c.email_address AS customer_email
+                 FROM invoices i
+                 JOIN customers c ON c.id = i.customer_id
+                 WHERE i.id = ?'
+            );
+            $stmt->execute([$invoiceId]);
+            $invoice = $stmt->fetch();
+
+            if (!$invoice) {
+                return ['success' => false, 'error' => "Invoice {$invoiceId} not found"];
+            }
+            if (empty($invoice['customer_email'])) {
+                return ['success' => false, 'error' => "Invoice {$invoiceId}: customer has no email"];
+            }
+
+            $subject = 'Payment Reminder: Invoice ' . $invoice['invoice_number'];
+            $message = 'Dear ' . htmlspecialchars($invoice['customer_name'], ENT_QUOTES, 'UTF-8') . ",\n\n"
+                . "This is a friendly reminder that invoice " . $invoice['invoice_number']
+                . " dated " . $invoice['invoice_date']
+                . " has an outstanding balance of "
+                . number_format((float)$invoice['balance'], 2)
+                . ".\n\nPlease arrange payment at your earliest convenience.\n\nThank you.";
+
+            $result = sendEmail($pdo, [
+                'invoice_id' => $invoiceId,
+                'to_email'   => $invoice['customer_email'],
+                'subject'    => $subject,
+                'message'    => nl2br(htmlspecialchars($message, ENT_QUOTES, 'UTF-8')),
+                'type'       => 'reminder',
+            ]);
+
+            if ($result['success']) {
+                auditLog($pdo, (int)$auth['user_id'], $auth['username'],
+                    $invoice['store_code'] ?? null,
+                    'reminder_sent', 'invoice', $invoiceId,
+                    null, ['to_email' => $invoice['customer_email']]);
+            }
+
+            return $result;
+        };
+
+        // ── Bulk send: invoice_ids[] array ───────────────────────────────
+        if (!empty($body['invoice_ids']) && is_array($body['invoice_ids'])) {
+            $sent   = 0;
+            $errors = [];
+            foreach ($body['invoice_ids'] as $rawId) {
+                $invoiceId = (int)$rawId;
+                if (!$invoiceId) { continue; }
+                $result = $sendOneReminder($invoiceId);
+                if ($result['success']) {
+                    $sent++;
+                } else {
+                    $errors[] = $result['error'] ?? "Failed for invoice {$invoiceId}";
+                }
+            }
+            jsonResponse(['success' => true, 'sent' => $sent, 'errors' => $errors]);
+        }
+
+        // ── Single send: invoice_id ───────────────────────────────────────
         $invoiceId = (int)($body['invoice_id'] ?? 0);
-
         if (!$invoiceId) {
-            jsonResponse(['success' => false, 'error' => 'invoice_id required'], 422);
+            jsonResponse(['success' => false, 'error' => 'invoice_id or invoice_ids required'], 422);
         }
 
-        $stmt = $pdo->prepare(
-            'SELECT i.*, c.company_name AS customer_name, c.email_address AS customer_email
-             FROM invoices i
-             JOIN customers c ON c.id = i.customer_id
-             WHERE i.id = ?'
-        );
-        $stmt->execute([$invoiceId]);
-        $invoice = $stmt->fetch();
-
-        if (!$invoice) {
-            jsonResponse(['success' => false, 'error' => 'Invoice not found'], 404);
-        }
-        if (empty($invoice['customer_email'])) {
-            jsonResponse(['success' => false, 'error' => 'Customer has no email address'], 422);
-        }
-
-        $subject = 'Payment Reminder: Invoice ' . $invoice['invoice_number'];
-        $message = 'Dear ' . htmlspecialchars($invoice['customer_name'], ENT_QUOTES, 'UTF-8') . ",\n\n"
-            . "This is a friendly reminder that invoice " . $invoice['invoice_number']
-            . " dated " . $invoice['invoice_date']
-            . " has an outstanding balance of "
-            . number_format((float)$invoice['balance'], 2)
-            . ".\n\nPlease arrange payment at your earliest convenience.\n\nThank you.";
-
-        $result = sendEmail($pdo, [
-            'invoice_id' => $invoiceId,
-            'to_email'   => $invoice['customer_email'],
-            'subject'    => $subject,
-            'message'    => nl2br(htmlspecialchars($message, ENT_QUOTES, 'UTF-8')),
-            'type'       => 'reminder',
-        ]);
-
-        if ($result['success']) {
-            // Log reminder send via audit_log (invoice has email_sent_at for general email tracking)
-            auditLog($pdo, (int)$auth['user_id'], $auth['username'],
-                $invoice['store_code'] ?? null,
-                'reminder_sent', 'invoice', $invoiceId,
-                null, ['to_email' => $invoice['customer_email']]);
-        }
-
-        jsonResponse($result);
+        $result = $sendOneReminder($invoiceId);
+        $code = $result['success'] ? 200
+              : (str_contains($result['error'] ?? '', 'not found') ? 404 : 422);
+        jsonResponse($result, $code);
     }
 
     jsonResponse(['success' => false, 'error' => 'Method not allowed'], 405);

@@ -71,6 +71,12 @@
     <button data-screen="reportsScreen" onclick="App.showScreen('reportsScreen')">
       <span class="icon">📊</span> Reports
     </button>
+    <button data-screen="stockScreen" class="admin-only" onclick="App.showScreen('stockScreen')">
+      <span class="icon">📦</span> Stock
+    </button>
+    <button data-screen="adminScreen" class="admin-role-only" onclick="App.showScreen('adminScreen')">
+      <span class="icon">🛡️</span> Admin
+    </button>
     <button data-screen="settingsScreen" class="admin-only" onclick="App.showScreen('settingsScreen')">
       <span class="icon">⚙️</span> Settings
     </button>
@@ -213,7 +219,7 @@
         ⬇️ Download PDF
       </button>
       <button class="btn btn-light" onclick="App.emailInvoice()">
-        ✉️ Email
+        📧 Email Invoice
       </button>
       <button class="btn btn-light" onclick="App.showAddPaymentModal()">
         💳 Add Payment
@@ -221,7 +227,13 @@
       <button class="btn btn-light" id="btnPaymentLink" onclick="App.sendPaymentLink()" title="Generate online payment link for this invoice">
         🔗 Send Payment Link
       </button>
+      <button id="btnSendReminder" class="btn btn-light hidden" onclick="App.sendSingleReminder()" title="Send overdue payment reminder">
+        ⚠️ Send Reminder
+      </button>
     </div>
+
+    <!-- Email tracking status -->
+    <div id="emailTrackingStatus" class="hidden" style="margin:.5rem 0;font-size:.85rem;color:#9e9e9e;padding:.4rem .75rem;background:rgba(255,255,255,.05);border-radius:6px;border-left:3px solid #4caf50"></div>
 
     <!-- More Options (collapsible) -->
     <div class="card mt-3">
@@ -314,6 +326,14 @@
       <h2>📄 Invoices</h2>
       <button class="btn btn-primary btn-sm" onclick="Invoice.newInvoice(); App.showScreen('invoiceScreen')">
         ➕ New Invoice
+      </button>
+    </div>
+
+    <!-- Overdue banner (hidden by default) -->
+    <div id="overdueBanner" class="hidden" style="background:#7f2a00;border:1px solid #ff6b35;border-radius:8px;padding:.75rem 1rem;margin-bottom:1rem;display:flex;align-items:center;justify-content:space-between;gap:.75rem;flex-wrap:wrap">
+      <span id="overdueBannerText" style="font-weight:600;color:#fff">⚠️ Invoices are overdue</span>
+      <button class="btn btn-sm" style="background:#ff6b35;border:none;color:#fff;font-weight:600" onclick="App.openOverdueModal()">
+        📧 Send Reminders
       </button>
     </div>
 
@@ -663,6 +683,124 @@
   </section>
   <!-- /settingsScreen -->
 
+  <!-- ──────────────────────────────────────────────────────────
+       SCREEN 7: Stock Management (admin + manager)
+  ─────────────────────────────────────────────────────────── -->
+  <section id="stockScreen" class="screen admin-only" aria-label="Stock Management">
+    <div class="flex justify-between items-center mb-3">
+      <h2>📦 Stock Management</h2>
+      <button class="btn btn-primary btn-sm" onclick="App.loadStock()">🔄 Refresh</button>
+    </div>
+
+    <div class="filter-bar mb-3">
+      <input type="search" id="stockSearchInput" class="form-control" placeholder="Filter products…" aria-label="Filter stock"
+        oninput="App.filterStock(this.value)">
+      <label class="form-label" style="margin:0;display:flex;align-items:center;gap:.4rem;white-space:nowrap">
+        <input type="checkbox" id="stockLowOnly" onchange="App.loadStock()"> Low stock only
+      </label>
+    </div>
+
+    <div class="table-wrap">
+      <table class="data-table" aria-label="Stock levels" id="stockTable">
+        <thead>
+          <tr>
+            <th>Product Code</th>
+            <th>Description</th>
+            <th class="text-right">Current Stock</th>
+            <th class="text-right">Min Stock</th>
+            <th>Last Updated</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="stockTbody">
+          <tr><td colspan="6" class="text-center text-muted">Select Stock from the menu to load.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+  <!-- /stockScreen -->
+
+  <!-- ──────────────────────────────────────────────────────────
+       SCREEN 8: Admin Dashboard (admin only)
+  ─────────────────────────────────────────────────────────── -->
+  <section id="adminScreen" class="screen admin-role-only" aria-label="Admin Dashboard">
+    <div class="flex justify-between items-center mb-3">
+      <h2>🛡️ Admin Dashboard</h2>
+      <div class="btn-row">
+        <button class="btn btn-light btn-sm" onclick="App.runAdminBackup()">💾 Run Backup Now</button>
+        <button class="btn btn-accent btn-sm" onclick="App.loadOperators()">👥 View All Users</button>
+      </div>
+    </div>
+
+    <!-- Today's Sales -->
+    <div class="stats-grid" id="adminSalesGrid" style="margin-bottom:1.25rem">
+      <div class="stat-card">
+        <div class="stat-label">FAL Sales Today</div>
+        <div class="stat-value" id="adminFalSales">—</div>
+      </div>
+      <div class="stat-card success">
+        <div class="stat-label">GWE Sales Today</div>
+        <div class="stat-value" id="adminGweSales">—</div>
+      </div>
+      <div class="stat-card accent">
+        <div class="stat-label">Database Size</div>
+        <div class="stat-value" id="adminDbSize">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Sync Pending</div>
+        <div class="stat-value" id="adminSyncPending">—</div>
+      </div>
+    </div>
+
+    <div class="form-row col-2" style="gap:1rem;align-items:start">
+      <!-- Who's Online -->
+      <div class="card">
+        <h3 style="margin-bottom:.75rem">👤 Who's Online</h3>
+        <div id="adminOnlineList" style="color:#9e9e9e;font-size:.9rem">Loading…</div>
+      </div>
+
+      <!-- System Health -->
+      <div class="card">
+        <h3 style="margin-bottom:.75rem">🔧 System Health</h3>
+        <div id="adminHealthInfo" style="font-size:.9rem;line-height:1.7">Loading…</div>
+      </div>
+    </div>
+
+    <!-- Recent Audit Log -->
+    <div class="card mt-3">
+      <h3 style="margin-bottom:.75rem">📋 Recent Audit Log</h3>
+      <div class="table-wrap">
+        <table class="data-table" aria-label="Recent audit log">
+          <thead>
+            <tr><th>Timestamp</th><th>User</th><th>Action</th><th>Entity</th><th>ID</th></tr>
+          </thead>
+          <tbody id="adminAuditTbody">
+            <tr><td colspan="5" class="text-center text-muted">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- User Management -->
+    <div class="card mt-3" id="adminUsersSection">
+      <div class="flex justify-between items-center mb-3">
+        <h3>👥 User Management</h3>
+        <button class="btn btn-primary btn-sm" onclick="App.openAddUserModal()">➕ Add User</button>
+      </div>
+      <div class="table-wrap">
+        <table class="data-table" aria-label="Users">
+          <thead>
+            <tr><th>Username</th><th>Role</th><th>Store</th><th>Status</th><th></th></tr>
+          </thead>
+          <tbody id="adminUsersTbody">
+            <tr><td colspan="5" class="text-center text-muted">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+  <!-- /adminScreen -->
+
 </main>
 <!-- /mainContent -->
 
@@ -689,6 +827,11 @@
     onclick="App.showScreen('reportsScreen')" aria-label="Reports">
     <span class="icon">📊</span>
     <span>Reports</span>
+  </button>
+  <button class="nav-btn admin-only" data-screen="stockScreen"
+    onclick="App.showScreen('stockScreen')" aria-label="Stock">
+    <span class="icon">📦</span>
+    <span>Stock</span>
   </button>
   <button class="nav-btn admin-only" data-screen="settingsScreen"
     onclick="App.showScreen('settingsScreen')" aria-label="Settings">
@@ -803,30 +946,30 @@
   </div>
 </div>
 
-<!-- ── Email Modal ─────────────────────────────────────────── -->
-<div id="emailModal" class="hidden" role="dialog" aria-modal="true" aria-labelledby="emailModalTitle">
+<!-- ── Email Invoice Modal ─────────────────────────────────── -->
+<div id="emailInvoiceModal" class="hidden" role="dialog" aria-modal="true" aria-labelledby="emailInvoiceModalTitle">
   <div class="modal-backdrop">
     <div class="modal-card">
       <div class="modal-header">
-        <h3 id="emailModalTitle">✉️ Email Invoice</h3>
-        <button class="modal-close" onclick="App.closeModal('emailModal')" aria-label="Close">×</button>
+        <h3 id="emailInvoiceModalTitle">📧 Email Invoice</h3>
+        <button class="modal-close" onclick="App.closeModal('emailInvoiceModal')" aria-label="Close">×</button>
       </div>
       <div class="form-group">
-        <label class="form-label" for="email_to">To</label>
-        <input type="email" id="email_to" name="email_to" class="form-control" aria-label="Email recipient">
+        <label class="form-label" for="emailInv_to">To</label>
+        <input type="email" id="emailInv_to" name="to_email" class="form-control" aria-label="Email recipient">
       </div>
       <div class="form-group">
-        <label class="form-label" for="email_subject">Subject</label>
-        <input type="text" id="email_subject" name="email_subject" class="form-control" aria-label="Email subject">
+        <label class="form-label" for="emailInv_subject">Subject</label>
+        <input type="text" id="emailInv_subject" name="subject" class="form-control" aria-label="Email subject">
       </div>
       <div class="form-group">
-        <label class="form-label" for="email_body">Message</label>
-        <textarea id="email_body" name="email_body" class="form-control" rows="6" aria-label="Email message"></textarea>
+        <label class="form-label" for="emailInv_message">Message</label>
+        <textarea id="emailInv_message" name="message" class="form-control" rows="6" aria-label="Email message"></textarea>
       </div>
       <p class="text-muted small mb-2">📎 The invoice PDF will be attached automatically.</p>
       <div class="modal-footer">
-        <button class="btn btn-light" onclick="App.closeModal('emailModal')">Cancel</button>
-        <button id="btnSendEmail" class="btn btn-primary">📤 Send Email</button>
+        <button class="btn btn-light" onclick="App.closeModal('emailInvoiceModal')">Cancel</button>
+        <button id="btnSendEmailInvoice" class="btn btn-primary">📤 Send Email</button>
       </div>
     </div>
   </div>
@@ -930,6 +1073,118 @@
           <button type="submit" class="btn btn-primary">Save Product</button>
         </div>
       </form>
+    </div>
+  </div>
+</div>
+
+<!-- ── Overdue Reminders Modal ─────────────────────────────── -->
+<div id="overdueModal" class="hidden" role="dialog" aria-modal="true" aria-labelledby="overdueModalTitle">
+  <div class="modal-backdrop">
+    <div class="modal-card" style="max-width:680px">
+      <div class="modal-header">
+        <h3 id="overdueModalTitle">⚠️ Send Overdue Reminders</h3>
+        <button class="modal-close" onclick="App.closeModal('overdueModal')" aria-label="Close">×</button>
+      </div>
+      <p class="text-muted mb-2" style="font-size:.9rem">Select invoices to send payment reminder emails.</p>
+      <div class="table-wrap" style="max-height:320px;overflow-y:auto">
+        <table class="data-table" aria-label="Overdue invoices">
+          <thead>
+            <tr>
+              <th style="width:2rem"><input type="checkbox" id="overdueSelectAll" checked onchange="App.toggleAllOverdue(this.checked)"></th>
+              <th>Invoice #</th>
+              <th>Customer</th>
+              <th class="text-right">Outstanding</th>
+              <th>Days Overdue</th>
+            </tr>
+          </thead>
+          <tbody id="overdueInvoicesTbody">
+            <tr><td colspan="5" class="text-center text-muted">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-light" onclick="App.closeModal('overdueModal')">Cancel</button>
+        <button id="btnSendSelectedReminders" class="btn btn-primary" onclick="App.sendSelectedReminders()">
+          📧 Send Selected Reminders
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Adjust Stock Modal ──────────────────────────────────── -->
+<div id="adjustStockModal" class="hidden" role="dialog" aria-modal="true" aria-labelledby="adjustStockModalTitle">
+  <div class="modal-backdrop">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 id="adjustStockModalTitle">📦 Adjust Stock</h3>
+        <button class="modal-close" onclick="App.closeModal('adjustStockModal')" aria-label="Close">×</button>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Product</label>
+        <input type="text" id="adjustStockProductName" class="form-control" readonly aria-label="Product name">
+        <input type="hidden" id="adjustStockProductId">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="adjustStockQty">Quantity Change (+/-)</label>
+        <input type="number" id="adjustStockQty" class="form-control" step="0.001" placeholder="e.g. +10 or -5" aria-label="Quantity change">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="adjustStockReason">Reason</label>
+        <select id="adjustStockReason" class="form-control" aria-label="Reason">
+          <option value="Delivery received">Delivery received</option>
+          <option value="Stock take">Stock take</option>
+          <option value="Damaged">Damaged</option>
+          <option value="Other">Other</option>
+        </select>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-light" onclick="App.closeModal('adjustStockModal')">Cancel</button>
+        <button id="btnSaveStockAdjust" class="btn btn-primary" onclick="App.saveStockAdjust()">💾 Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Add / Edit User Modal ──────────────────────────────── -->
+<div id="addUserModal" class="hidden" role="dialog" aria-modal="true" aria-labelledby="addUserModalTitle">
+  <div class="modal-backdrop">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 id="addUserModalTitle">👤 Add User</h3>
+        <button class="modal-close" onclick="App.closeModal('addUserModal')" aria-label="Close">×</button>
+      </div>
+      <input type="hidden" id="editUserId">
+      <div class="form-row col-2">
+        <div class="form-group" style="grid-column:1/-1">
+          <label class="form-label" for="editUserUsername">Username *</label>
+          <input type="text" id="editUserUsername" class="form-control" required autocomplete="off" aria-label="Username">
+        </div>
+        <div class="form-group" style="grid-column:1/-1">
+          <label class="form-label" for="editUserPassword">Password <span id="editUserPwNote" class="text-muted">(required for new user)</span></label>
+          <input type="password" id="editUserPassword" class="form-control" autocomplete="new-password" aria-label="Password">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="editUserRole">Role</label>
+          <select id="editUserRole" class="form-control" aria-label="Role">
+            <option value="counter">Operator</option>
+            <option value="manager">Manager</option>
+            <option value="admin">Admin</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="editUserStore">Store</label>
+          <select id="editUserStore" class="form-control" aria-label="Store">
+            <option value="">All Stores</option>
+            <option value="1">Falcarragh (FAL)</option>
+            <option value="2">Gweedore (GWE)</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-light" onclick="App.closeModal('addUserModal')">Cancel</button>
+        <button id="btnSaveUser" class="btn btn-primary" onclick="App.saveOperator()">💾 Save User</button>
+      </div>
     </div>
   </div>
 </div>

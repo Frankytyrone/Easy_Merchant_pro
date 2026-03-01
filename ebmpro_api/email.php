@@ -6,6 +6,34 @@ header('Content-Type: application/json; charset=utf-8');
 
 $auth = requireAuth();
 
+// ── GET — return email tracking info for an invoice ───────────────────────────
+if ($_SERVER['REQUEST_METHOD'] === 'GET') {
+    $invoiceId = (int)($_GET['invoice_id'] ?? 0);
+    if (!$invoiceId) {
+        jsonResponse(['success' => false, 'error' => 'invoice_id required'], 422);
+    }
+    try {
+        $pdo  = getDb();
+        $stmt = $pdo->prepare(
+            'SELECT sent_at AS emailed_at, to_email,
+                    (SELECT COUNT(*) FROM email_log el2
+                     WHERE el2.invoice_id = ? AND el2.status = \'opened\') AS opened_count,
+                    (SELECT MAX(el3.opened_at) FROM email_log el3
+                     WHERE el3.invoice_id = ?) AS last_opened_at
+             FROM email_log
+             WHERE invoice_id = ?
+             ORDER BY sent_at DESC
+             LIMIT 1'
+        );
+        $stmt->execute([$invoiceId, $invoiceId, $invoiceId]);
+        $row = $stmt->fetch();
+        jsonResponse(['success' => true, 'data' => $row ?: null]);
+    } catch (PDOException $e) {
+        error_log('email.php GET error: ' . $e->getMessage());
+        jsonResponse(['success' => false, 'error' => 'Service unavailable'], 503);
+    }
+}
+
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     jsonResponse(['success' => false, 'error' => 'Method not allowed'], 405);
 }
