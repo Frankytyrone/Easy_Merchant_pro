@@ -46,6 +46,16 @@ CREATE TABLE IF NOT EXISTS audit_log (
   INDEX idx_created (created_at)
 );
 
+-- Rate limit table (general-purpose request throttling)
+CREATE TABLE IF NOT EXISTS rate_limit (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  ip_address VARCHAR(45) NOT NULL,
+  action VARCHAR(50) NOT NULL,
+  window_start TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_ip_action (ip_address, action),
+  INDEX idx_window (window_start)
+);
+
 CREATE TABLE IF NOT EXISTS quotes (
   id INT PRIMARY KEY AUTO_INCREMENT,
   quote_number VARCHAR(30) NOT NULL UNIQUE,

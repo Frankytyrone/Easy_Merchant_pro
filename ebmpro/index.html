@@ -1624,6 +1624,7 @@
   </div>
 </div>
 
+<script src="/ebmpro/js/config.js"></script>
 <script src="/ebmpro/js/db.js"></script>
 <script src="/ebmpro/js/sync.js"></script>
 <script src="/ebmpro/js/auth.js"></script>
@@ -1842,7 +1843,7 @@ const Diagnose = (() => {
     if (runBtn)  runBtn.disabled = true;
 
     try {
-      const resp = await fetch('/ebmpro_api/diagnose.php');
+      const resp = await fetch('/ebmpro_api/diagnose.php?token=' + (typeof DIAGNOSE_TOKEN !== 'undefined' ? DIAGNOSE_TOKEN : ''));
       if (!resp.ok) {
         throw new Error(`Server returned HTTP ${resp.status} ${resp.statusText}`);
       }
