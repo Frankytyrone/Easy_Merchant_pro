@@ -148,7 +148,8 @@ function importCustomers(array $rows, PDO $pdo): array
             ]);
             $imported++;
         } catch (PDOException $e) {
-            $errors[] = 'Row ' . ($i + 2) . ': ' . $e->getMessage();
+            error_log('import_csv customers row ' . ($i + 2) . ': ' . $e->getMessage());
+            $errors[] = 'Row ' . ($i + 2) . ': Database error (duplicate or invalid data)';
         }
     }
 
@@ -218,7 +219,8 @@ function importProducts(array $rows, PDO $pdo): array
             ]);
             $imported++;
         } catch (PDOException $e) {
-            $errors[] = 'Row ' . ($i + 2) . ': ' . $e->getMessage();
+            error_log('import_csv products row ' . ($i + 2) . ': ' . $e->getMessage());
+            $errors[] = 'Row ' . ($i + 2) . ': Database error (duplicate or invalid data)';
         }
     }
 
@@ -309,7 +311,8 @@ function importInvoices(array $rows, PDO $pdo): array
             ]);
             $imported++;
         } catch (PDOException $e) {
-            $errors[] = 'Row ' . ($i + 2) . ': ' . $e->getMessage();
+            error_log('import_csv invoices row ' . ($i + 2) . ': ' . $e->getMessage());
+            $errors[] = 'Row ' . ($i + 2) . ': Database error (duplicate or invalid data)';
         }
     }
 

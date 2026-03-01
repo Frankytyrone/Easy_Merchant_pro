@@ -16,6 +16,7 @@ $auth = requireAuth();
 if ($auth['role'] !== 'admin') {
     jsonResponse(['success' => false, 'error' => 'Admin access required'], 403);
 }
+checkRateLimit('api', 20);
 
 define('BACKUP_DIR', __DIR__ . '/backups/');
 

@@ -48,6 +48,10 @@ function setCorsHeaders(): void
     header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
     header('Access-Control-Allow-Headers: Authorization, Content-Type, X-Requested-With');
 
+    if (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') {
+        header('Strict-Transport-Security: max-age=31536000; includeSubDomains');
+    }
+
     if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
         http_response_code(204);
         exit;
@@ -127,6 +131,50 @@ function requireAuth(): array
         jsonResponse(['success' => false, 'error' => 'Invalid or expired token'], 401);
     }
     return $payload;
+}
+
+/**
+ * General-purpose rate limiting by IP + action using the rate_limit table.
+ * Returns HTTP 429 and exits if the limit is exceeded.
+ */
+function checkRateLimit(string $action, int $maxPerMinute = 60): void
+{
+    $ip = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
+    try {
+        $pdo    = getDb();
+        $window = date('Y-m-d H:i:s', time() - 60);
+
+        // Count requests in the current window
+        $stmt = $pdo->prepare(
+            'SELECT COUNT(*) FROM rate_limit
+             WHERE ip_address = ? AND action = ? AND window_start > ?'
+        );
+        $stmt->execute([$ip, $action, $window]);
+        $count = (int) $stmt->fetchColumn();
+
+        if ($count >= $maxPerMinute) {
+            jsonResponse(['error' => 'Too many requests'], 429);
+        }
+
+        // Record this request
+        $pdo->prepare(
+            'INSERT INTO rate_limit (ip_address, action, window_start)
+             VALUES (?, ?, NOW())'
+        )->execute([$ip, $action]);
+
+        // Prune old entries occasionally (non-fatal, ~1-in-50 requests)
+        if (mt_rand(1, 50) === 1) {
+            try {
+                $pdo->prepare('DELETE FROM rate_limit WHERE window_start < ?')
+                    ->execute([date('Y-m-d H:i:s', time() - 3600)]);
+            } catch (Throwable $e) {
+                // Non-fatal cleanup failure
+            }
+        }
+    } catch (Throwable $e) {
+        // Rate limit table may not exist yet — fail open to avoid breaking requests
+        error_log('checkRateLimit error: ' . $e->getMessage());
+    }
 }
 
 /**

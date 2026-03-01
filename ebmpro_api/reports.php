@@ -19,6 +19,7 @@ setCorsHeaders();
 header('Content-Type: application/json; charset=utf-8');
 
 $auth = requireAuth();
+checkRateLimit('api');
 
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     jsonResponse(['success' => false, 'error' => 'GET required'], 405);

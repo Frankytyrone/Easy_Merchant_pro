@@ -1,7 +1,7 @@
 <?php
 /* ============================================================
    EBM Pro — Self-Diagnosis / System Health Endpoint
-   Public endpoint — no authentication required.
+   Requires ?token= parameter matching DIAGNOSE_TOKEN from config.php.
    Does NOT expose passwords or secret keys in output.
    ============================================================ */
 
@@ -14,6 +14,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(204);
     exit;
 }
+
+// Token check — extract DIAGNOSE_TOKEN from config.php via regex (safe, no eval/include)
+$_configSrc      = file_exists(__DIR__ . '/config.php') ? file_get_contents(__DIR__ . '/config.php') : '';
+$_expectedToken  = '';
+if (preg_match("/define\s*\(\s*'DIAGNOSE_TOKEN'\s*,\s*['\"]([^'\"]+)['\"]\s*\)/", $_configSrc, $_m)) {
+    $_expectedToken = $_m[1];
+}
+$_providedToken = $_GET['token'] ?? '';
+if ($_expectedToken === '' || $_providedToken === ''
+    || !hash_equals($_expectedToken, $_providedToken)) {
+    http_response_code(403);
+    echo json_encode(['error' => 'Forbidden']);
+    exit;
+}
+unset($_configSrc, $_expectedToken, $_providedToken, $_m);
 
 $checks  = [];
 $errors  = 0;

@@ -143,7 +143,8 @@ function syncCreateInvoice(PDO $pdo, array $auth, array $b): array
         return ['ok' => true, 'entity_id' => $newId];
     } catch (Throwable $e) {
         $pdo->rollBack();
-        return ['ok' => false, 'error' => $e->getMessage()];
+        error_log('sync.php createInvoice error: ' . $e->getMessage());
+        return ['ok' => false, 'error' => 'Database error'];
     }
 }
 

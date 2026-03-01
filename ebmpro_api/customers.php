@@ -5,6 +5,7 @@ setCorsHeaders();
 header('Content-Type: application/json; charset=utf-8');
 
 $auth   = requireAuth();
+checkRateLimit('api');
 $method = $_SERVER['REQUEST_METHOD'];
 $pdo    = getDb();
 

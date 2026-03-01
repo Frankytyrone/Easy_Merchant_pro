@@ -29,6 +29,9 @@ define('API_PATH',  '/ebmpro_api/');
 define('TRACK_URL', 'https://shanemcgee.biz/track/open.php');
 define('JWT_SECRET', '69a09b0ef43bcb8970f16b5b915fac3be4c68caa954d3a6a7e2d9ecc71ff719a');
 
+// Secret token required to access diagnose.php — change this to a random string on your server
+define('DIAGNOSE_TOKEN', 'CHANGE_ME_TO_RANDOM_STRING');
+
 try {
     $pdo = new PDO('mysql:host='.DB_HOST.';dbname='.DB_NAME.';charset=utf8mb4', DB_USER, DB_PASS, [
         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
