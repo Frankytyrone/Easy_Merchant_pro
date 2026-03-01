@@ -113,7 +113,11 @@ function validateToken(string $token): ?array
  */
 function requireAuth(): array
 {
-    $authHeader = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
+    $apacheHeader = function_exists('apache_request_headers') ? (apache_request_headers()['Authorization'] ?? '') : '';
+    $authHeader = $_SERVER['HTTP_AUTHORIZATION']
+        ?? $_SERVER['REDIRECT_HTTP_AUTHORIZATION']
+        ?? $apacheHeader
+        ?? '';
     if (strncasecmp($authHeader, 'Bearer ', 7) !== 0) {
         jsonResponse(['success' => false, 'error' => 'Authorization header missing or malformed'], 401);
     }
