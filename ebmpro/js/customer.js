@@ -182,7 +182,7 @@ const Customer = (() => {
     const tbody = document.getElementById('customersTbody');
     if (!tbody) return;
 
-    tbody.innerHTML = '<tr><td colspan="5" class="text-center"><span class="spinner"></span> Loading…</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" class="text-center"><span class="spinner"></span> Loading…</td></tr>';
 
     try {
       const url   = query
@@ -193,21 +193,22 @@ const Customer = (() => {
       const custs = Array.isArray(data) ? data : (data.customers || []);
 
       if (!custs.length) {
-        tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No customers found.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No customers found.</td></tr>';
         return;
       }
 
       tbody.innerHTML = custs.map(c => `
-        <tr onclick="Customer.showEditCustomerModal(${c.id})">
-          <td><strong>${escapeHtml(c.name || '')}</strong></td>
-          <td>${escapeHtml(c.phone || '')}</td>
-          <td>${escapeHtml(c.email || '')}</td>
-          <td>${escapeHtml(c.town || '')}</td>
-          <td>${escapeHtml(c.county || '')}</td>
+        <tr>
+          <td onclick="Customer.showEditCustomerModal(${c.id})"><strong>${escapeHtml(c.name || '')}</strong></td>
+          <td onclick="Customer.showEditCustomerModal(${c.id})">${escapeHtml(c.phone || '')}</td>
+          <td onclick="Customer.showEditCustomerModal(${c.id})">${escapeHtml(c.email || '')}</td>
+          <td onclick="Customer.showEditCustomerModal(${c.id})">${escapeHtml(c.town || '')}</td>
+          <td onclick="Customer.showEditCustomerModal(${c.id})">${escapeHtml(c.county || '')}</td>
+          <td><button class="btn btn-sm btn-light" onclick="App.openStatementModal(${c.id})" title="Send account statement">📄 Statement</button></td>
         </tr>
       `).join('');
     } catch {
-      tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Failed to load customers.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Failed to load customers.</td></tr>';
     }
   }
 

@@ -224,8 +224,8 @@
       <button class="btn btn-light" onclick="App.showAddPaymentModal()">
         💳 Add Payment
       </button>
-      <button class="btn btn-light" id="btnPaymentLink" onclick="App.sendPaymentLink()" title="Generate online payment link for this invoice">
-        🔗 Send Payment Link
+      <button class="btn btn-light" id="btnPaymentLink" onclick="App.createPaymentLink()" title="Generate online payment link for this invoice">
+        🔗 Create Payment Link
       </button>
       <button id="btnSendReminder" class="btn btn-light hidden" onclick="App.sendSingleReminder()" title="Send overdue payment reminder">
         ⚠️ Send Reminder
@@ -413,10 +413,11 @@
             <th>Email</th>
             <th>Town</th>
             <th>County</th>
+            <th></th>
           </tr>
         </thead>
         <tbody id="customersTbody">
-          <tr><td colspan="5" class="text-center text-muted">Select Customers from the menu to load.</td></tr>
+          <tr><td colspan="6" class="text-center text-muted">Select Customers from the menu to load.</td></tr>
         </tbody>
       </table>
     </div>
@@ -471,14 +472,28 @@
     <div class="flex justify-between items-center mb-3">
       <h2>📊 Reports</h2>
       <div class="flex gap-2 items-center flex-wrap">
+        <select id="reportStore" class="form-control" style="width:auto" aria-label="Store">
+          <option value="">Both Stores</option>
+          <option value="FAL">FAL – Falcarragh</option>
+          <option value="GWE">GWE – Gweedore</option>
+        </select>
+        <select id="reportType" class="form-control" style="width:auto" aria-label="Report type">
+          <option value="sales_summary">Sales Summary</option>
+          <option value="vat_summary">VAT Summary</option>
+          <option value="sales_by_product">Sales by Product</option>
+          <option value="sales_by_customer">Sales by Customer</option>
+          <option value="overdue">Overdue Invoices</option>
+          <option value="email_activity">Email Activity</option>
+        </select>
         <input type="date" id="reportDateFrom" class="form-control" style="width:auto" aria-label="Report from date">
         <span>to</span>
         <input type="date" id="reportDateTo" class="form-control" style="width:auto" aria-label="Report to date">
-        <button class="btn btn-primary btn-sm" onclick="App.showReports()">🔍 Run</button>
+        <button class="btn btn-primary btn-sm" onclick="App.runReport()">🔍 Run Report</button>
+        <button class="btn btn-light btn-sm" onclick="App.exportReportCSV()">⬇️ Export CSV</button>
       </div>
     </div>
 
-    <!-- Stats cards -->
+    <!-- Stats cards (populated by sales_summary and legacy dashboard call) -->
     <div class="stats-grid">
       <div class="stat-card">
         <div class="stat-label">Total Invoiced</div>
@@ -498,8 +513,9 @@
       </div>
     </div>
 
-    <div class="table-wrap">
-      <table class="data-table" aria-label="Report invoice list">
+    <!-- Report results area -->
+    <div id="reportResults" class="table-wrap">
+      <table class="data-table" aria-label="Report results">
         <thead>
           <tr>
             <th>Invoice #</th>
@@ -511,7 +527,7 @@
           </tr>
         </thead>
         <tbody id="reportInvoicesTbody">
-          <tr><td colspan="6" class="text-center text-muted">Run a report to see results.</td></tr>
+          <tr><td colspan="6" class="text-center text-muted">Select a report type and click Run Report.</td></tr>
         </tbody>
       </table>
     </div>
@@ -596,7 +612,6 @@
       <div class="btn-row">
         <button class="btn btn-light" onclick="App.showAuditLog()">📋 View Audit Log</button>
         <button class="btn btn-light" onclick="triggerBackup()">💾 Download Backup</button>
-        <a href="/ebmpro/admin.html" class="btn btn-accent" target="_blank">🛡️ Admin Dashboard</a>
         <a href="/ebmpro/help.html" class="btn btn-light" target="_blank">❓ Operator Manual</a>
       </div>
 
@@ -794,6 +809,24 @@
           </thead>
           <tbody id="adminUsersTbody">
             <tr><td colspan="5" class="text-center text-muted">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Backup Files -->
+    <div class="card mt-3">
+      <div class="flex justify-between items-center mb-3">
+        <h3>💾 Saved Backups</h3>
+        <button class="btn btn-light btn-sm" onclick="App.loadAdminBackupList()">🔄 Refresh</button>
+      </div>
+      <div class="table-wrap">
+        <table class="data-table" aria-label="Backup files">
+          <thead>
+            <tr><th>Filename</th><th>Size</th><th>Created</th><th></th></tr>
+          </thead>
+          <tbody id="adminBackupsTbody">
+            <tr><td colspan="4" class="text-center text-muted">Loading…</td></tr>
           </tbody>
         </table>
       </div>
@@ -1184,6 +1217,84 @@
       <div class="modal-footer">
         <button class="btn btn-light" onclick="App.closeModal('addUserModal')">Cancel</button>
         <button id="btnSaveUser" class="btn btn-primary" onclick="App.saveOperator()">💾 Save User</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Statement Modal ─────────────────────────────────────── -->
+<div id="statementModal" class="hidden" role="dialog" aria-modal="true" aria-labelledby="statementModalTitle">
+  <div class="modal-backdrop">
+    <div class="modal-card" style="max-width:640px">
+      <div class="modal-header">
+        <h3 id="statementModalTitle">📄 Customer Statement</h3>
+        <button class="modal-close" onclick="App.closeModal('statementModal')" aria-label="Close">×</button>
+      </div>
+      <input type="hidden" id="statementCustomerId">
+      <div class="form-row col-2">
+        <div class="form-group">
+          <label class="form-label" for="statementFrom">From Date</label>
+          <input type="date" id="statementFrom" class="form-control" aria-label="Statement from date">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="statementTo">To Date</label>
+          <input type="date" id="statementTo" class="form-control" aria-label="Statement to date">
+        </div>
+      </div>
+      <div class="table-wrap" style="max-height:320px;overflow-y:auto">
+        <table class="data-table" aria-label="Statement preview">
+          <thead>
+            <tr><th>Date</th><th>Invoice #</th><th>Status</th><th class="text-right">Total</th><th class="text-right">Balance</th><th class="text-right">Running</th></tr>
+          </thead>
+          <tbody id="statementPreviewTbody">
+            <tr><td colspan="6" class="text-center text-muted">Click Preview to load invoices.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-light" onclick="App.closeModal('statementModal')">Cancel</button>
+        <button class="btn btn-light" onclick="App.sendStatement(false)">👁️ Preview</button>
+        <button id="btnSendStatement" class="btn btn-primary" onclick="App.sendStatement(true)">📧 Send Statement</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Payment Link Modal ────────────────────────────────── -->
+<div id="paymentLinkModal" class="hidden" role="dialog" aria-modal="true" aria-labelledby="paymentLinkModalTitle">
+  <div class="modal-backdrop">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 id="paymentLinkModalTitle">💳 Create Payment Link</h3>
+        <button class="modal-close" onclick="App.closeModal('paymentLinkModal')" aria-label="Close">×</button>
+      </div>
+      <input type="hidden" id="paymentLinkInvoiceId">
+      <div class="form-group">
+        <label class="form-label" for="paymentLinkAmount">Amount to Pay (€)</label>
+        <input type="number" id="paymentLinkAmount" class="form-control" min="0.01" step="0.01" aria-label="Payment amount">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Payment Provider</label>
+        <div class="method-pills" role="radiogroup" aria-label="Payment provider">
+          <div class="method-pill">
+            <input type="radio" id="pl_stripe" name="payment_provider" value="stripe" checked>
+            <label for="pl_stripe">Stripe</label>
+          </div>
+          <div class="method-pill">
+            <input type="radio" id="pl_revolut" name="payment_provider" value="revolut">
+            <label for="pl_revolut">Revolut</label>
+          </div>
+          <div class="method-pill">
+            <input type="radio" id="pl_sumup" name="payment_provider" value="sumup">
+            <label for="pl_sumup">SumUp</label>
+          </div>
+        </div>
+      </div>
+      <div id="paymentLinkResult" class="hidden" style="background:rgba(76,175,80,.1);border:1px solid #4caf50;border-radius:6px;padding:.75rem;margin:.5rem 0;word-break:break-all;font-size:.9rem"></div>
+      <div class="modal-footer">
+        <button class="btn btn-light" onclick="App.closeModal('paymentLinkModal')">Cancel</button>
+        <button id="btnCopyPaymentLink" class="btn btn-light hidden" onclick="App.copyPaymentLink()">📋 Copy Link</button>
+        <button id="btnGeneratePaymentLink" class="btn btn-primary" onclick="App.generatePaymentLinkFromModal()">🔗 Generate Link</button>
       </div>
     </div>
   </div>
