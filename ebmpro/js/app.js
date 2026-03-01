@@ -34,7 +34,7 @@ const App = (() => {
       case 'customersScreen': Customer.showCustomerList(); break;
       case 'reportsScreen':  showReports();          break;
       case 'settingsScreen': showSettings();         break;
-      case 'adminScreen':    loadAdminDashboard();   break;
+      case 'adminScreen':    loadAdminDashboard(); loadBackupList(); break;
       case 'stockScreen':    loadStock();            break;
     }
   }
@@ -761,12 +761,17 @@ const App = (() => {
     const btn = document.querySelector('[onclick="App.runAdminBackup()"]');
     if (btn) { btn.disabled = true; btn.innerHTML = '⏳ Backing up…'; }
     try {
-      const resp = await fetch('/ebmpro_api/admin.php?action=run_backup', {
+      const resp = await fetch('/ebmpro_api/backup.php?action=create', {
         method: 'POST',
         headers: Auth.getAuthHeaders(),
       });
       const data = await resp.json();
-      showToast(data.success ? `✅ Backup created: ${data.filename}` : '❌ Backup failed.', data.success ? 'success' : 'danger');
+      if (data.success) {
+        showToast(`✅ Backup created: ${data.filename} (${data.size_mb} MB)`, 'success');
+        loadBackupList();
+      } else {
+        showToast(data.error || '❌ Backup failed.', 'danger');
+      }
     } catch {
       showToast('❌ Backup failed.', 'danger');
     } finally {
@@ -1027,6 +1032,360 @@ const App = (() => {
     }
   }
 
+  /* ── Reports: run report ──────────────────────────────────── */
+  async function runReport() {
+    const type  = (document.getElementById('reportType')  || {}).value || 'sales_summary';
+    const store = (document.getElementById('reportStore') || {}).value || getCurrentStore();
+    const from  = (document.getElementById('reportDateFrom') || {}).value || '';
+    const to    = (document.getElementById('reportDateTo')   || {}).value || '';
+
+    const params = new URLSearchParams({ action: type });
+    if (store && store !== 'both') params.set('store', store.toUpperCase());
+    if (from)  params.set('from', from);
+    if (to)    params.set('to',   to);
+
+    const tbody  = document.getElementById('reportResultsTbody');
+    const thead  = document.getElementById('reportResultsThead');
+    const footer = document.getElementById('reportResultsFooter');
+    if (tbody) tbody.innerHTML = '<tr><td colspan="6" class="text-center"><span class="spinner"></span> Loading…</td></tr>';
+
+    try {
+      const resp = await fetch(`/ebmpro_api/reports.php?${params}`, { headers: Auth.getAuthHeaders() });
+      const data = await resp.json();
+      if (!data.success) { showToast(data.error || 'Report failed', 'danger'); return; }
+
+      window._reportData = data.data;
+      const rows = Array.isArray(data.data) ? data.data : [data.data];
+
+      if (thead && tbody) {
+        const cols = rows.length ? Object.keys(rows[0]) : [];
+        thead.innerHTML = '<tr>' + cols.map(c => `<th>${escHtml(c.replace(/_/g,' '))}</th>`).join('') + '</tr>';
+        tbody.innerHTML = rows.map(r =>
+          '<tr>' + cols.map(c => `<td>${escHtml(String(r[c] ?? ''))}</td>`).join('') + '</tr>'
+        ).join('') || '<tr><td colspan="6" class="text-center text-muted">No data for this period.</td></tr>';
+      }
+      if (footer) footer.textContent = rows.length + ' row' + (rows.length !== 1 ? 's' : '');
+    } catch {
+      showToast('Failed to load report.', 'danger');
+    }
+  }
+
+  /* ── Reports: export CSV ──────────────────────────────────── */
+  function exportReportCSV() {
+    const rows = window._reportData;
+    if (!rows || !rows.length) { showToast('Run a report first.', 'warning'); return; }
+    const dataArr = Array.isArray(rows) ? rows : [rows];
+    const cols    = Object.keys(dataArr[0]);
+    const lines   = [cols.join(',')];
+    dataArr.forEach(r => {
+      lines.push(cols.map(c => {
+        const v = String(r[c] ?? '');
+        return v.includes(',') || v.includes('"') || v.includes('\n') ? '"' + v.replace(/"/g, '""') + '"' : v;
+      }).join(','));
+    });
+    const blob = new Blob([lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = 'report-' + new Date().toISOString().slice(0, 10) + '.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  /* ── Statement modal ──────────────────────────────────────── */
+  function openStatementModal(customerId) {
+    const modal = document.getElementById('statementModal');
+    if (!modal) return;
+    const today    = new Date();
+    const thirtyAgo = new Date(); thirtyAgo.setDate(today.getDate() - 30);
+    const fmt = d => d.toISOString().slice(0, 10);
+
+    const fromEl = document.getElementById('stmtDateFrom');
+    const toEl   = document.getElementById('stmtDateTo');
+    const cidEl  = document.getElementById('stmtCustomerId');
+    if (fromEl) fromEl.value = fmt(thirtyAgo);
+    if (toEl)   toEl.value   = fmt(today);
+    if (cidEl)  cidEl.value  = customerId || '';
+
+    const tbody = document.getElementById('stmtPreviewTbody');
+    if (tbody) tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Click Preview to load invoices.</td></tr>';
+
+    modal.classList.remove('hidden');
+    // Auto-preview
+    if (customerId) previewStatement(customerId);
+  }
+
+  async function previewStatement(customerId) {
+    const cidEl  = document.getElementById('stmtCustomerId');
+    const fromEl = document.getElementById('stmtDateFrom');
+    const toEl   = document.getElementById('stmtDateTo');
+    const id     = customerId || (cidEl && cidEl.value) || '';
+    const from   = fromEl ? fromEl.value : '';
+    const to     = toEl   ? toEl.value   : '';
+    if (!id) { showToast('No customer selected', 'warning'); return; }
+
+    const params = new URLSearchParams({ customer_id: id });
+    if (from) params.set('from', from);
+    if (to)   params.set('to',   to);
+
+    const tbody = document.getElementById('stmtPreviewTbody');
+    if (tbody) tbody.innerHTML = '<tr><td colspan="5" class="text-center"><span class="spinner"></span></td></tr>';
+
+    try {
+      const resp = await fetch(`/ebmpro_api/statements.php?${params}`, { headers: Auth.getAuthHeaders() });
+      const data = await resp.json();
+      if (!data.success) { showToast(data.error || 'Failed to load statement', 'danger'); return; }
+      const d     = data.data;
+      const invs  = d.invoices || [];
+      const titleEl = document.getElementById('stmtCustomerName');
+      if (titleEl) titleEl.textContent = d.customer.company_name || d.customer.contact_name || '';
+      let running = d.opening_balance || 0;
+      if (tbody) {
+        tbody.innerHTML = invs.map(inv => {
+          running += parseFloat(inv.total) - parseFloat(inv.amount_paid);
+          return `<tr>
+            <td>${escHtml(inv.invoice_date)}</td>
+            <td>${escHtml(inv.invoice_number)}</td>
+            <td class="text-right">${fmtCur(inv.total)}</td>
+            <td class="text-right">${fmtCur(inv.amount_paid)}</td>
+            <td class="text-right">${fmtCur(running)}</td>
+          </tr>`;
+        }).join('') || '<tr><td colspan="5" class="text-center text-muted">No invoices in period.</td></tr>';
+      }
+      const balEl = document.getElementById('stmtClosingBalance');
+      if (balEl) balEl.textContent = fmtCur(d.closing_balance);
+    } catch {
+      showToast('Failed to load statement.', 'danger');
+    }
+  }
+
+  async function sendStatement() {
+    const cidEl  = document.getElementById('stmtCustomerId');
+    const fromEl = document.getElementById('stmtDateFrom');
+    const toEl   = document.getElementById('stmtDateTo');
+    const id     = cidEl ? parseInt(cidEl.value) : 0;
+    if (!id) { showToast('No customer selected', 'warning'); return; }
+
+    const btn = document.getElementById('btnSendStatement');
+    if (btn) { btn.disabled = true; btn.innerHTML = '⏳ Sending…'; }
+    try {
+      const resp = await fetch('/ebmpro_api/statements.php', {
+        method: 'POST',
+        headers: Object.assign({ 'Content-Type': 'application/json' }, Auth.getAuthHeaders()),
+        body: JSON.stringify({
+          customer_id: id,
+          from:        fromEl ? fromEl.value : '',
+          to:          toEl   ? toEl.value   : '',
+          send_email:  true,
+        }),
+      });
+      const data = await resp.json();
+      if (data.success) {
+        closeModal('statementModal');
+        showToast(data.message || '✅ Statement sent.', 'success');
+      } else {
+        showToast(data.error || '❌ Failed to send statement.', 'danger');
+      }
+    } catch {
+      showToast('Network error — could not send statement.', 'danger');
+    } finally {
+      if (btn) { btn.disabled = false; btn.innerHTML = '📧 Send Statement'; }
+    }
+  }
+
+  /* ── Create Payment Link modal ────────────────────────────── */
+  function createPaymentLink(invoiceId) {
+    const modal = document.getElementById('paymentLinkModal');
+    if (!modal) return;
+    const inv   = typeof Invoice !== 'undefined' ? Invoice.getCurrent() : null;
+    const bal   = inv ? (parseFloat(inv.balance || 0) || parseFloat(inv.total || 0)) : 0;
+    const balEl = document.getElementById('plAmount');
+    const idEl  = document.getElementById('plInvoiceId');
+    if (balEl) balEl.textContent = fmtCur(bal);
+    if (idEl)  idEl.value = invoiceId || (inv ? inv.id : '');
+    const resultEl = document.getElementById('plResult');
+    if (resultEl) resultEl.classList.add('hidden');
+    modal.classList.remove('hidden');
+  }
+
+  async function generatePaymentLink() {
+    const invoiceId = document.getElementById('plInvoiceId')?.value;
+    const gateway   = document.getElementById('plGateway')?.value || 'stripe';
+    if (!invoiceId) { showToast('No invoice selected.', 'warning'); return; }
+
+    const btn = document.getElementById('btnGenerateLink');
+    if (btn) { btn.disabled = true; btn.innerHTML = '⏳ Generating…'; }
+
+    try {
+      const resp = await fetch('/ebmpro_api/create_payment_link.php', {
+        method: 'POST',
+        headers: Object.assign({ 'Content-Type': 'application/json' }, Auth.getAuthHeaders()),
+        body: JSON.stringify({ invoice_id: parseInt(invoiceId), gateway }),
+      });
+      const data = await resp.json();
+      if (data.success && data.url) {
+        const resultEl = document.getElementById('plResult');
+        const urlEl    = document.getElementById('plUrl');
+        if (urlEl)    urlEl.value = data.url;
+        if (resultEl) resultEl.classList.remove('hidden');
+        showToast('Payment link generated!', 'success');
+      } else {
+        showToast(data.error || 'Failed to generate payment link.', 'danger');
+      }
+    } catch {
+      showToast('Network error — could not generate payment link.', 'danger');
+    } finally {
+      if (btn) { btn.disabled = false; btn.innerHTML = '🔗 Generate Link'; }
+    }
+  }
+
+  function copyPaymentLink() {
+    const urlEl = document.getElementById('plUrl');
+    if (!urlEl) return;
+    try {
+      navigator.clipboard.writeText(urlEl.value).then(() => showToast('Link copied!', 'success'));
+    } catch { showToast('Could not copy link.', 'warning'); }
+  }
+
+  async function sendPaymentLinkToCustomer() {
+    const urlEl = document.getElementById('plUrl');
+    const idEl  = document.getElementById('plInvoiceId');
+    if (!urlEl || !idEl) return;
+    const inv = typeof Invoice !== 'undefined' ? Invoice.getCurrent() : null;
+    const email = inv ? (inv.customer_email || inv.email_address || '') : '';
+    if (!email) { showToast('No customer email on this invoice.', 'warning'); return; }
+
+    try {
+      await Sync.syncData('/ebmpro_api/email.php', {
+        invoice_id: parseInt(idEl.value),
+        to_email:   email,
+        subject:    'Payment link for invoice ' + (inv ? inv.invoice_number : ''),
+        message:    'Please use this link to pay your invoice: ' + urlEl.value,
+        type:       'payment_link',
+      }, 'POST');
+      showToast('Payment link sent to ' + email, 'success');
+      closeModal('paymentLinkModal');
+    } catch {
+      showToast('Failed to send payment link email.', 'danger');
+    }
+  }
+
+  /* ── Admin: data import ───────────────────────────────────── */
+  async function startDataImport(type) {
+    const cap       = type.charAt(0).toUpperCase() + type.slice(1);
+    const fileInput = document.getElementById('adminImport' + cap + 'File');
+    if (!fileInput || !fileInput.files.length) { showToast('Please select a file first.', 'warning'); return; }
+
+    const progressDiv = document.getElementById('adminImport' + cap + 'Progress');
+    const bar         = document.getElementById('adminImport' + cap + 'Bar');
+    const msg         = document.getElementById('adminImport' + cap + 'Msg');
+    if (progressDiv) progressDiv.style.display = '';
+    if (bar) { bar.style.background = '#4caf50'; bar.style.width = '0%'; }
+    if (msg) { msg.style.color = '#ccc'; msg.textContent = 'Uploading…'; }
+
+    const endpoints = {
+      products:  '/ebmpro_api/import_products.php',
+      customers: '/ebmpro_api/import_customers.php',
+      invoices:  '/ebmpro_api/import_invoices.php',
+      payments:  '/ebmpro_api/import_payments.php',
+    };
+    const endpoint = endpoints[type];
+    if (!endpoint) { showToast('Unknown import type.', 'danger'); return; }
+
+    let storeId   = null;
+    let storeCode = null;
+    if (type === 'products') {
+      const el = document.getElementById('adminImportProductsStore');
+      if (el) storeId = el.value;
+    }
+    if (type === 'invoices') {
+      const el = document.getElementById('adminImportInvoicesStore');
+      if (el) storeCode = el.value;
+    }
+
+    const file         = fileInput.files[0];
+    let totalInserted  = 0;
+    let totalSkipped   = 0;
+    let offset         = 0;
+    let startTime      = null;
+
+    const sendChunk = async () => {
+      if (startTime === null) startTime = Date.now();
+      const fd = new FormData();
+      fd.append('offset', offset);
+      if (offset === 0) fd.append('file', file);
+      if (storeId)   fd.append('store_id',   storeId);
+      if (storeCode) fd.append('store_code', storeCode);
+
+      const res  = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + (Auth.getToken ? Auth.getToken() : localStorage.getItem('ebm_token')) },
+        body: fd,
+      });
+      const data = await res.json();
+
+      if (!data.success) {
+        if (bar) bar.style.background = '#f44336';
+        if (msg) { msg.style.color = '#f44336'; msg.textContent = '❌ Error: ' + (data.error || 'Import failed'); }
+        return;
+      }
+
+      totalInserted += data.inserted || 0;
+      totalSkipped  += data.skipped  || 0;
+      const pct      = data.percentage || 0;
+      if (bar) bar.style.width = pct + '%';
+
+      if (!data.done) {
+        const elapsed   = (Date.now() - startTime) / 1000;
+        const processed = data.processed || 0;
+        const total     = data.total || 0;
+        const rate      = elapsed > 0 ? processed / elapsed : 0;
+        const etaSec    = rate > 0 ? Math.ceil((total - processed) / rate) : 0;
+        if (msg) msg.textContent = `Importing ${processed.toLocaleString()} of ${total.toLocaleString()}… ${pct}% (${etaSec > 0 ? etaSec + 's remaining' : ''})`;
+        offset = data.processed;
+        await sendChunk();
+      } else {
+        if (bar) bar.style.width = '100%';
+        if (msg) { msg.style.color = '#4caf50'; msg.textContent = `✅ Complete! ${totalInserted.toLocaleString()} imported, ${totalSkipped.toLocaleString()} skipped`; }
+        showToast(`Import complete: ${totalInserted} imported, ${totalSkipped} skipped`, 'success');
+      }
+    };
+
+    try { await sendChunk(); }
+    catch (e) {
+      if (bar) bar.style.background = '#f44336';
+      if (msg) { msg.style.color = '#f44336'; msg.textContent = '❌ Network error: ' + e.message; }
+    }
+  }
+
+  /* ── Admin: load backup list ──────────────────────────────── */
+  async function loadBackupList() {
+    const tbody = document.getElementById('adminBackupsTbody');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="4" class="text-center"><span class="spinner"></span></td></tr>';
+    try {
+      const resp = await fetch('/ebmpro_api/backup.php?action=list', { headers: Auth.getAuthHeaders() });
+      const data = await resp.json();
+      const list = data.data || [];
+      if (!list.length) {
+        tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">No backups found. Click "Run Backup Now" to create one.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = list.map(b => `
+        <tr>
+          <td>${escHtml(b.filename)}</td>
+          <td>${b.size_mb} MB</td>
+          <td>${escHtml(b.created)}</td>
+          <td>
+            <a href="/ebmpro_api/backup.php?action=download&file=${encodeURIComponent(b.filename)}" class="btn btn-sm btn-light">⬇️ Download</a>
+          </td>
+        </tr>
+      `).join('');
+    } catch {
+      tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">Failed to load backups.</td></tr>';
+    }
+  }
+
   document.addEventListener('DOMContentLoaded', init);
 
   return {
@@ -1075,5 +1434,16 @@ const App = (() => {
     openAdjustStockModal,
     saveStockAdjust,
     adjustStock,
+    runReport,
+    exportReportCSV,
+    openStatementModal,
+    previewStatement,
+    sendStatement,
+    createPaymentLink,
+    generatePaymentLink,
+    copyPaymentLink,
+    sendPaymentLinkToCustomer,
+    loadBackupList,
+    startDataImport,
   };
 })();

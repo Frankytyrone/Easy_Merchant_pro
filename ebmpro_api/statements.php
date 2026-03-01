@@ -1,4 +1,13 @@
 <?php
+/**
+ * statements.php — Customer statement generation
+ *
+ * GET  ?customer_id=X&from=YYYY-MM-DD&to=YYYY-MM-DD
+ *   → Returns customer statement with invoices and running balance
+ *
+ * POST { customer_id, from, to, send_email: true }
+ *   → Generates and emails statement to customer's email address
+ */
 require_once __DIR__ . '/common.php';
 
 setCorsHeaders();
@@ -7,20 +16,30 @@ header('Content-Type: application/json; charset=utf-8');
 $auth   = requireAuth();
 $method = $_SERVER['REQUEST_METHOD'];
 
-if ($method !== 'GET') {
+if (!in_array($method, ['GET', 'POST'], true)) {
     jsonResponse(['success' => false, 'error' => 'Method not allowed'], 405);
 }
 
-$customerId = (int)($_GET['customer_id'] ?? 0);
-if (!$customerId) {
-    jsonResponse(['success' => false, 'error' => 'customer_id parameter required'], 422);
-}
-
-$dateFrom = $_GET['date_from'] ?? null;
-$dateTo   = $_GET['date_to']   ?? null;
-
 try {
     $pdo = getDb();
+
+    // ── Parse request ─────────────────────────────────────────────────────────
+    if ($method === 'POST') {
+        $body       = json_decode(file_get_contents('php://input'), true) ?? [];
+        $customerId = (int)($body['customer_id'] ?? 0);
+        $dateFrom   = $body['from'] ?? null;
+        $dateTo     = $body['to']   ?? null;
+        $sendEmail  = !empty($body['send_email']);
+    } else {
+        $customerId = (int)($_GET['customer_id'] ?? 0);
+        $dateFrom   = $_GET['from'] ?? $_GET['date_from'] ?? null;
+        $dateTo     = $_GET['to']   ?? $_GET['date_to']   ?? null;
+        $sendEmail  = false;
+    }
+
+    if (!$customerId) {
+        jsonResponse(['success' => false, 'error' => 'customer_id parameter required'], 422);
+    }
 
     // ── Customer details ──────────────────────────────────────────────────────
     $stmt = $pdo->prepare('SELECT * FROM customers WHERE id = ?');
@@ -30,7 +49,7 @@ try {
         jsonResponse(['success' => false, 'error' => 'Customer not found'], 404);
     }
 
-    // ── Opening balance: sum of invoice balances before date_from ─────────────
+    // ── Opening balance ───────────────────────────────────────────────────────
     $openingBalance = 0.0;
     if ($dateFrom) {
         $stmt = $pdo->prepare(
@@ -48,14 +67,8 @@ try {
     $where  = ["customer_id = ?", "status != 'cancelled'"];
     $params = [$customerId];
 
-    if ($dateFrom) {
-        $where[]  = 'invoice_date >= ?';
-        $params[] = $dateFrom;
-    }
-    if ($dateTo) {
-        $where[]  = 'invoice_date <= ?';
-        $params[] = $dateTo;
-    }
+    if ($dateFrom) { $where[] = 'invoice_date >= ?'; $params[] = $dateFrom; }
+    if ($dateTo)   { $where[] = 'invoice_date <= ?'; $params[] = $dateTo;   }
 
     $sql = 'SELECT id, invoice_number, invoice_type, invoice_date, due_date,
                    total, amount_paid, balance, status
@@ -82,18 +95,130 @@ try {
     $periodBalance  = array_sum(array_column($invoices, 'balance'));
     $closingBalance = round($openingBalance + $periodBalance, 2);
 
-    jsonResponse([
-        'success' => true,
-        'data'    => [
-            'customer'        => $customer,
-            'date_from'       => $dateFrom,
-            'date_to'         => $dateTo,
-            'opening_balance' => $openingBalance,
-            'invoices'        => $invoices,
-            'closing_balance' => $closingBalance,
-            'generated_at'    => date('Y-m-d H:i:s'),
-        ],
-    ]);
+    $statementData = [
+        'customer'        => $customer,
+        'date_from'       => $dateFrom,
+        'date_to'         => $dateTo,
+        'opening_balance' => $openingBalance,
+        'invoices'        => $invoices,
+        'closing_balance' => $closingBalance,
+        'generated_at'    => date('Y-m-d H:i:s'),
+    ];
+
+    // ── Email statement ───────────────────────────────────────────────────────
+    if ($sendEmail) {
+        $toEmail = trim($customer['email_address'] ?? '');
+        if (!filter_var($toEmail, FILTER_VALIDATE_EMAIL)) {
+            jsonResponse(['success' => false, 'error' => 'Customer has no valid email address'], 422);
+        }
+
+        $allSettings = getSettings($pdo);
+        $shopName    = $allSettings['shop_name'] ?? 'Easy Builders Merchant Pro';
+        $fromName    = $allSettings['smtp_from_name'] ?? $shopName;
+        $fromEmail   = $allSettings['smtp_from_email'] ?? ('noreply@' . ($_SERVER['HTTP_HOST'] ?? 'localhost'));
+
+        // Build HTML table
+        $custName    = htmlspecialchars($customer['company_name'] ?? $customer['contact_name'] ?? 'Customer', ENT_QUOTES);
+        $periodStr   = ($dateFrom ? htmlspecialchars($dateFrom) : 'beginning') .
+                       ' to ' .
+                       ($dateTo   ? htmlspecialchars($dateTo)   : date('Y-m-d'));
+        $address     = htmlspecialchars(
+            implode(', ', array_filter([
+                $customer['address_1'] ?? '',
+                $customer['address_2'] ?? '',
+                $customer['inv_town']  ?? '',
+            ])),
+            ENT_QUOTES
+        );
+
+        $rows = '';
+        $running = $openingBalance;
+        foreach ($invoices as $inv) {
+            $debit  = (float)$inv['total'];
+            $credit = (float)$inv['amount_paid'];
+            $running += $debit - $credit;
+            $rows .= '<tr>'
+                . '<td>' . htmlspecialchars($inv['invoice_date'],   ENT_QUOTES) . '</td>'
+                . '<td>' . htmlspecialchars($inv['invoice_number'], ENT_QUOTES) . '</td>'
+                . '<td>' . htmlspecialchars($inv['invoice_type'],   ENT_QUOTES) . '</td>'
+                . '<td style="text-align:right">€' . number_format($debit,  2) . '</td>'
+                . '<td style="text-align:right">€' . number_format($credit, 2) . '</td>'
+                . '<td style="text-align:right">€' . number_format($running, 2) . '</td>'
+                . '</tr>';
+        }
+
+        $htmlBody = '<!DOCTYPE html><html><body style="font-family:Arial,sans-serif;color:#222;">'
+            . '<h2>' . htmlspecialchars($shopName, ENT_QUOTES) . ' — Customer Statement</h2>'
+            . '<p><strong>Customer:</strong> ' . $custName . '<br>'
+            . '<strong>Address:</strong> ' . $address . '<br>'
+            . '<strong>Period:</strong> ' . $periodStr . '</p>'
+            . '<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%">'
+            . '<thead style="background:#1a3a2a;color:#fff">'
+            . '<tr><th>Date</th><th>Invoice No.</th><th>Type</th><th>Debit</th><th>Credit</th><th>Balance</th></tr>'
+            . '</thead><tbody>'
+            . '<tr><td colspan="5"><em>Opening balance</em></td>'
+            . '<td style="text-align:right">€' . number_format($openingBalance, 2) . '</td></tr>'
+            . $rows
+            . '</tbody></table>'
+            . '<p><strong>Total Outstanding: €' . number_format($closingBalance, 2) . '</strong></p>'
+            . '<p style="color:#666;font-size:.85em">This statement was generated on ' . date('d/m/Y') . '.</p>'
+            . '</body></html>';
+
+        // PHPMailer
+        $mailerDir = __DIR__ . '/PHPMailer/';
+        if (!file_exists($mailerDir . 'PHPMailer.php')) {
+            jsonResponse(['success' => false, 'error' => 'PHPMailer library not found'], 500);
+        }
+        require_once $mailerDir . 'Exception.php';
+        require_once $mailerDir . 'PHPMailer.php';
+        require_once $mailerDir . 'SMTP.php';
+
+        $mail = new PHPMailer\PHPMailer\PHPMailer(true);
+        try {
+            $mail->isSMTP();
+            $mail->Host       = $allSettings['smtp_host']  ?? 'localhost';
+            $mail->Port       = (int)($allSettings['smtp_port'] ?? 587);
+            $mail->SMTPAuth   = !empty($allSettings['smtp_user']);
+            $mail->Username   = $allSettings['smtp_user']  ?? '';
+            $mail->Password   = $allSettings['smtp_pass']  ?? '';
+            $mail->SMTPSecure = 'tls';
+            $mail->setFrom($fromEmail, $fromName);
+            $mail->addAddress($toEmail);
+            $mail->Subject    = "Statement from {$shopName} — {$periodStr}";
+            $mail->isHTML(true);
+            $mail->Body       = $htmlBody;
+            $mail->AltBody    = "Customer Statement for {$custName} — period {$periodStr}. Outstanding: €" . number_format($closingBalance, 2);
+            $mail->CharSet    = 'UTF-8';
+            $mail->send();
+        } catch (Exception $e) {
+            error_log('statements.php mail error: ' . $e->getMessage());
+            jsonResponse(['success' => false, 'error' => 'Failed to send email: ' . $mail->ErrorInfo], 500);
+        }
+
+        // Log to email_log
+        try {
+            $pdo->prepare(
+                'INSERT INTO email_log
+                 (customer_id, to_email, subject, sent_at, status)
+                 VALUES (?, ?, ?, NOW(), ?)'
+            )->execute([
+                $customerId,
+                $toEmail,
+                "Statement from {$shopName} — {$periodStr}",
+                'sent',
+            ]);
+        } catch (Throwable $logEx) {
+            error_log('statements.php log error: ' . $logEx->getMessage());
+        }
+
+        jsonResponse([
+            'success' => true,
+            'message' => "Statement emailed to {$toEmail}",
+            'data'    => $statementData,
+        ]);
+    }
+
+    jsonResponse(['success' => true, 'data' => $statementData]);
 
 } catch (PDOException $e) {
     error_log('statements.php DB error: ' . $e->getMessage());

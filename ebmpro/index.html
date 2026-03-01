@@ -224,8 +224,8 @@
       <button class="btn btn-light" onclick="App.showAddPaymentModal()">
         💳 Add Payment
       </button>
-      <button class="btn btn-light" id="btnPaymentLink" onclick="App.sendPaymentLink()" title="Generate online payment link for this invoice">
-        🔗 Send Payment Link
+      <button class="btn btn-light" id="btnPaymentLink" onclick="App.createPaymentLink()" title="Create online payment link for this invoice">
+        💳 Create Payment Link
       </button>
       <button id="btnSendReminder" class="btn btn-light hidden" onclick="App.sendSingleReminder()" title="Send overdue payment reminder">
         ⚠️ Send Reminder
@@ -470,15 +470,33 @@
   <section id="reportsScreen" class="screen" aria-label="Reports">
     <div class="flex justify-between items-center mb-3">
       <h2>📊 Reports</h2>
+    </div>
+
+    <!-- Report controls -->
+    <div class="card mb-3">
       <div class="flex gap-2 items-center flex-wrap">
+        <select id="reportType" class="form-control" style="width:auto" aria-label="Report type">
+          <option value="sales_summary">Sales Summary</option>
+          <option value="vat_summary">VAT Summary</option>
+          <option value="sales_by_product">Sales by Product</option>
+          <option value="sales_by_customer">Sales by Customer</option>
+          <option value="overdue">Overdue Invoices</option>
+          <option value="email_activity">Email Activity</option>
+        </select>
+        <select id="reportStore" class="form-control" style="width:auto" aria-label="Store">
+          <option value="FAL">Falcarragh</option>
+          <option value="GWE">Gweedore</option>
+          <option value="both">Both Stores</option>
+        </select>
         <input type="date" id="reportDateFrom" class="form-control" style="width:auto" aria-label="Report from date">
         <span>to</span>
         <input type="date" id="reportDateTo" class="form-control" style="width:auto" aria-label="Report to date">
-        <button class="btn btn-primary btn-sm" onclick="App.showReports()">🔍 Run</button>
+        <button class="btn btn-primary btn-sm" onclick="App.runReport()">🔍 Run Report</button>
+        <button class="btn btn-light btn-sm" onclick="App.exportReportCSV()">⬇️ Export CSV</button>
       </div>
     </div>
 
-    <!-- Stats cards -->
+    <!-- Stats cards (dashboard summary) -->
     <div class="stats-grid">
       <div class="stat-card">
         <div class="stat-label">Total Invoiced</div>
@@ -498,9 +516,10 @@
       </div>
     </div>
 
+    <!-- Report results table -->
     <div class="table-wrap">
-      <table class="data-table" aria-label="Report invoice list">
-        <thead>
+      <table class="data-table" aria-label="Report results">
+        <thead id="reportResultsThead">
           <tr>
             <th>Invoice #</th>
             <th>Customer</th>
@@ -510,9 +529,17 @@
             <th>Status</th>
           </tr>
         </thead>
-        <tbody id="reportInvoicesTbody">
-          <tr><td colspan="6" class="text-center text-muted">Run a report to see results.</td></tr>
+        <tbody id="reportResultsTbody">
+          <tr><td colspan="6" class="text-center text-muted">Select a report type and click Run Report.</td></tr>
         </tbody>
+      </table>
+      <div id="reportResultsFooter" style="padding:.4rem .5rem;font-size:.82rem;color:#888;"></div>
+    </div>
+
+    <!-- Dashboard invoice list (kept for showReports() compatibility) -->
+    <div class="table-wrap" style="display:none">
+      <table class="data-table">
+        <tbody id="reportInvoicesTbody"></tbody>
       </table>
     </div>
   </section>
@@ -798,6 +825,99 @@
         </table>
       </div>
     </div>
+
+    <!-- Backups -->
+    <div class="card mt-3">
+      <div class="flex justify-between items-center mb-3">
+        <h3>💾 Backup Files</h3>
+        <button class="btn btn-light btn-sm" onclick="App.loadBackupList()">🔄 Refresh</button>
+      </div>
+      <div class="table-wrap">
+        <table class="data-table" aria-label="Backup files">
+          <thead>
+            <tr><th>Filename</th><th>Size</th><th>Created</th><th></th></tr>
+          </thead>
+          <tbody id="adminBackupsTbody">
+            <tr><td colspan="4" class="text-center text-muted">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Data Import -->
+    <div class="card mt-3">
+      <h3 style="margin-bottom:.75rem">📥 Data Import</h3>
+      <p style="color:#9e9e9e;font-size:.88rem;margin-bottom:1rem">Import from Easy Invoicing Access database export. Accepts XML or CSV files.</p>
+
+      <!-- Products -->
+      <div style="border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:.85rem;margin-bottom:.75rem;">
+        <strong>📦 Products</strong> <span style="font-size:.8rem;color:#9e9e9e;">From tbl_products</span>
+        <div class="flex gap-2 flex-wrap items-center mt-2">
+          <input type="file" id="adminImportProductsFile" accept=".xml,.csv" style="flex:1;min-width:180px;">
+          <select id="adminImportProductsStore" class="form-control" style="width:auto">
+            <option value="">All Stores</option>
+            <option value="1">Falcarragh (FAL)</option>
+            <option value="2">Gweedore (GWE)</option>
+          </select>
+          <button class="btn btn-primary btn-sm" onclick="App.startDataImport('products')">Import</button>
+        </div>
+        <div id="adminImportProductsProgress" style="display:none;margin-top:.6rem;">
+          <div style="background:rgba(255,255,255,.1);border-radius:4px;height:8px;overflow:hidden;">
+            <div id="adminImportProductsBar" style="background:#4caf50;height:100%;width:0%;transition:width .3s;"></div>
+          </div>
+          <p id="adminImportProductsMsg" style="font-size:.8rem;margin:.3rem 0 0;color:#ccc;"></p>
+        </div>
+      </div>
+
+      <!-- Customers -->
+      <div style="border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:.85rem;margin-bottom:.75rem;">
+        <strong>👤 Customers</strong> <span style="font-size:.8rem;color:#9e9e9e;">From tbl_clients</span>
+        <div class="flex gap-2 flex-wrap items-center mt-2">
+          <input type="file" id="adminImportCustomersFile" accept=".xml,.csv" style="flex:1;min-width:180px;">
+          <button class="btn btn-primary btn-sm" onclick="App.startDataImport('customers')">Import</button>
+        </div>
+        <div id="adminImportCustomersProgress" style="display:none;margin-top:.6rem;">
+          <div style="background:rgba(255,255,255,.1);border-radius:4px;height:8px;overflow:hidden;">
+            <div id="adminImportCustomersBar" style="background:#4caf50;height:100%;width:0%;transition:width .3s;"></div>
+          </div>
+          <p id="adminImportCustomersMsg" style="font-size:.8rem;margin:.3rem 0 0;color:#ccc;"></p>
+        </div>
+      </div>
+
+      <!-- Invoices -->
+      <div style="border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:.85rem;margin-bottom:.75rem;">
+        <strong>🧾 Invoices</strong> <span style="font-size:.8rem;color:#9e9e9e;">From tbl_invoice</span>
+        <div class="flex gap-2 flex-wrap items-center mt-2">
+          <input type="file" id="adminImportInvoicesFile" accept=".xml,.csv" style="flex:1;min-width:180px;">
+          <select id="adminImportInvoicesStore" class="form-control" style="width:auto">
+            <option value="FAL">Falcarragh (FAL)</option>
+            <option value="GWE">Gweedore (GWE)</option>
+          </select>
+          <button class="btn btn-primary btn-sm" onclick="App.startDataImport('invoices')">Import</button>
+        </div>
+        <div id="adminImportInvoicesProgress" style="display:none;margin-top:.6rem;">
+          <div style="background:rgba(255,255,255,.1);border-radius:4px;height:8px;overflow:hidden;">
+            <div id="adminImportInvoicesBar" style="background:#4caf50;height:100%;width:0%;transition:width .3s;"></div>
+          </div>
+          <p id="adminImportInvoicesMsg" style="font-size:.8rem;margin:.3rem 0 0;color:#ccc;"></p>
+        </div>
+      </div>
+
+      <!-- Payments -->
+      <div style="border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:.85rem;">
+        <strong>💳 Payments</strong> <span style="font-size:.8rem;color:#9e9e9e;">From tbl_payments</span>
+        <div class="flex gap-2 flex-wrap items-center mt-2">
+          <input type="file" id="adminImportPaymentsFile" accept=".xml,.csv" style="flex:1;min-width:180px;">
+          <button class="btn btn-primary btn-sm" onclick="App.startDataImport('payments')">Import</button>
+        </div>
+        <div id="adminImportPaymentsProgress" style="display:none;margin-top:.6rem;">
+          <div style="background:rgba(255,255,255,.1);border-radius:4px;height:8px;overflow:hidden;">
+            <div id="adminImportPaymentsBar" style="background:#4caf50;height:100%;width:0%;transition:width .3s;"></div>
+          </div>
+          <p id="adminImportPaymentsMsg" style="font-size:.8rem;margin:.3rem 0 0;color:#ccc;"></p>
+        </div>
+      </div>
+    </div>
   </section>
   <!-- /adminScreen -->
 
@@ -939,6 +1059,7 @@
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-light" onclick="Customer.hideAddCustomerModal()">Cancel</button>
+          <button type="button" id="btnCustomerStatement" class="btn btn-light hidden" onclick="App.openStatementModal(document.querySelector('[name=id]')?.value)" title="Send account statement to this customer">📄 Statement</button>
           <button type="submit" class="btn btn-primary">Save Customer</button>
         </div>
       </form>
@@ -1356,6 +1477,89 @@ async function pwaInstall() {
     box-shadow:0 3px 12px rgba(0,0,0,.2);
   "
   title="Install app on this device">📲 Install App</button>
+
+<!-- ══════════════════════════════════════════════════════════
+     STATEMENT MODAL
+════════════════════════════════════════════════════════════ -->
+<div id="statementModal" class="hidden" role="dialog" aria-modal="true" aria-labelledby="statementModalTitle">
+  <div class="modal-backdrop">
+    <div class="modal-card" style="max-width:700px">
+      <div class="modal-header">
+        <h3 id="statementModalTitle">📄 Customer Statement — <span id="stmtCustomerName"></span></h3>
+        <button class="modal-close" onclick="App.closeModal('statementModal')" aria-label="Close">×</button>
+      </div>
+      <div style="padding:1rem">
+        <input type="hidden" id="stmtCustomerId">
+        <div class="flex gap-2 items-center flex-wrap mb-3">
+          <label>From:</label>
+          <input type="date" id="stmtDateFrom" class="form-control" style="width:auto">
+          <label>To:</label>
+          <input type="date" id="stmtDateTo" class="form-control" style="width:auto">
+          <button class="btn btn-light btn-sm" onclick="App.previewStatement()">🔍 Preview</button>
+        </div>
+        <div class="table-wrap" style="max-height:320px;overflow-y:auto">
+          <table class="data-table">
+            <thead>
+              <tr><th>Date</th><th>Invoice #</th><th class="text-right">Debit</th><th class="text-right">Credit</th><th class="text-right">Balance</th></tr>
+            </thead>
+            <tbody id="stmtPreviewTbody">
+              <tr><td colspan="5" class="text-center text-muted">Click Preview to load.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div style="text-align:right;font-weight:700;margin-top:.5rem">
+          Total Outstanding: <span id="stmtClosingBalance">€0.00</span>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-light" onclick="App.closeModal('statementModal')">Cancel</button>
+        <button class="btn btn-primary" id="btnSendStatement" onclick="App.sendStatement()">📧 Send Statement</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     PAYMENT LINK MODAL
+════════════════════════════════════════════════════════════ -->
+<div id="paymentLinkModal" class="hidden" role="dialog" aria-modal="true" aria-labelledby="paymentLinkModalTitle">
+  <div class="modal-backdrop">
+    <div class="modal-card" style="max-width:420px">
+      <div class="modal-header">
+        <h3 id="paymentLinkModalTitle">💳 Create Payment Link</h3>
+        <button class="modal-close" onclick="App.closeModal('paymentLinkModal')" aria-label="Close">×</button>
+      </div>
+      <div style="padding:1rem">
+        <input type="hidden" id="plInvoiceId">
+        <div class="form-group mb-3">
+          <label class="form-label">Amount to Pay</label>
+          <div style="font-size:1.4rem;font-weight:700" id="plAmount">€0.00</div>
+        </div>
+        <div class="form-group mb-3">
+          <label class="form-label">Payment Method</label>
+          <select id="plGateway" class="form-control">
+            <option value="stripe">Stripe</option>
+            <option value="revolut">Revolut</option>
+            <option value="sumup">SumUp</option>
+          </select>
+        </div>
+        <button class="btn btn-primary w-full" id="btnGenerateLink" onclick="App.generatePaymentLink()">🔗 Generate Link</button>
+
+        <div id="plResult" class="hidden" style="margin-top:1rem">
+          <label class="form-label">Payment URL</label>
+          <input type="text" id="plUrl" class="form-control" readonly style="margin-bottom:.5rem">
+          <div class="flex gap-2">
+            <button class="btn btn-light btn-sm flex-1" onclick="App.copyPaymentLink()">📋 Copy Link</button>
+            <button class="btn btn-primary btn-sm flex-1" onclick="App.sendPaymentLinkToCustomer()">📧 Send to Customer</button>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-light" onclick="App.closeModal('paymentLinkModal')">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <!-- ══════════════════════════════════════════════════════════
      DIAGNOSIS MODAL

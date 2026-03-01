@@ -145,6 +145,14 @@ const Customer = (() => {
     const modal = document.getElementById('addCustomerModal');
     if (!modal) return;
 
+    // Hide statement button for new customer
+    const stmtBtn = document.getElementById('btnCustomerStatement');
+    if (stmtBtn) stmtBtn.classList.add('hidden');
+
+    // Clear hidden id
+    const hiddenId = modal.querySelector('[name="id"]');
+    if (hiddenId) hiddenId.value = '';
+
     // Prefill name if provided
     const nameEl = modal.querySelector('[name="customer_name"]');
     if (nameEl) nameEl.value = prefill.name || '';
@@ -237,6 +245,16 @@ const Customer = (() => {
       modal.querySelector('#addCustomerForm').appendChild(hiddenId);
     }
     hiddenId.value = id;
+
+    // Show Statement button when editing existing customer
+    const stmtBtn = document.getElementById('btnCustomerStatement');
+    if (stmtBtn) {
+      stmtBtn.classList.remove('hidden');
+      stmtBtn.onclick = () => {
+        modal.classList.add('hidden');
+        if (typeof App !== 'undefined') App.openStatementModal(id);
+      };
+    }
 
     modal.classList.remove('hidden');
   }
