@@ -180,6 +180,24 @@ function runInstall(array $d): array
         }
     }
 
+    // 2b. Run schema_v2.sql (non-fatal — tables may already exist)
+    $schema2File = __DIR__ . '/schema_v2.sql';
+    if (file_exists($schema2File)) {
+        $sql2 = file_get_contents($schema2File);
+        $statements2 = array_filter(
+            array_map('trim', explode(';', $sql2)),
+            fn($s) => $s !== '' && !preg_match('/^--/', $s)
+        );
+        foreach ($statements2 as $stmt2) {
+            try {
+                $pdo->exec($stmt2);
+            } catch (PDOException $e) {
+                // Non-fatal: log and continue (tables may already exist)
+                error_log('schema_v2 warning: ' . $e->getMessage());
+            }
+        }
+    }
+
     // 3. Insert/update settings (key-value table)
     $prefixFal = strtoupper(substr(preg_replace('/[^A-Z0-9]/i', '', $d['invoice_prefix_falcarragh'] ?? 'FAL'), 0, 10)) ?: 'FAL';
     $prefixGwe = strtoupper(substr(preg_replace('/[^A-Z0-9]/i', '', $d['invoice_prefix_gweedore']   ?? 'GWE'), 0, 10)) ?: 'GWE';
