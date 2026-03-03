@@ -129,7 +129,11 @@ const Sync = (() => {
           headers,
           body: method !== 'GET' && method !== 'DELETE' ? JSON.stringify(data) : undefined
         });
-        return await resp.json();
+        const result = await resp.json();
+        if (!resp.ok || result.success === false) {
+          throw new Error(result.error || result.message || `Server error (${resp.status})`);
+        }
+        return result;
       } catch (err) {
         console.warn('[Sync] Fetch failed, queueing:', err);
         // Fall through to queue
