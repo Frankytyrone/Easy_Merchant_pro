@@ -185,6 +185,7 @@ const Customer = (() => {
           const saved  = Object.assign({}, obj, result || {});
           hideAddCustomerModal();
           App.showToast('Customer saved.', 'success');
+          showCustomerList();
           if (typeof onSave === 'function') onSave(saved);
         } catch (err) {
           App.showToast(err.message || 'Save failed.', 'danger');
@@ -195,7 +196,16 @@ const Customer = (() => {
 
   function hideAddCustomerModal() {
     const modal = document.getElementById('addCustomerModal');
-    if (modal) modal.classList.add('hidden');
+    if (!modal) return;
+    modal.classList.add('hidden');
+    const form = modal.querySelector('#addCustomerForm');
+    if (form) {
+      form.reset();
+      const hiddenId = form.querySelector('[name="id"]');
+      if (hiddenId) hiddenId.remove();
+    }
+    const title = modal.querySelector('.modal-header h3');
+    if (title) title.textContent = 'Add Customer';
   }
 
   /* ── showCustomerList ─────────────────────────────────────── */
@@ -272,6 +282,23 @@ const Customer = (() => {
     hiddenId.value = id;
 
     modal.classList.remove('hidden');
+
+    const form = modal.querySelector('#addCustomerForm');
+    if (form) {
+      form.onsubmit = async e => {
+        e.preventDefault();
+        const fd  = new FormData(form);
+        const obj = Object.fromEntries(fd.entries());
+        try {
+          await saveCustomer(obj);
+          hideAddCustomerModal();
+          App.showToast('Customer updated.', 'success');
+          showCustomerList();
+        } catch (err) {
+          App.showToast(err.message || 'Save failed.', 'danger');
+        }
+      };
+    }
   }
 
   /* ── escapeHtml helper ────────────────────────────────────── */

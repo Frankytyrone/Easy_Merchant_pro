@@ -440,7 +440,7 @@
   <section id="productsScreen" class="screen admin-only" aria-label="Products">
     <div class="flex justify-between items-center mb-3">
       <h2>📦 Products</h2>
-      <button class="btn btn-primary btn-sm" onclick="App.closeModal('addProductModal'); document.getElementById('addProductModal').classList.remove('hidden')">
+      <button class="btn btn-primary btn-sm" onclick="document.getElementById('addProductModal').classList.remove('hidden')">
         ➕ Add Product
       </button>
     </div>
@@ -1705,7 +1705,7 @@ async function loadProductList(query = '') {
     }
     tbody.innerHTML = list.map(p => `
       <tr>
-        <td><strong>${escH(p.code || '')}</strong></td>
+        <td><strong>${escH(p.product_code || p.code || '')}</strong></td>
         <td>${escH(p.description || '')}</td>
         <td class="text-right">€${parseFloat(p.price || 0).toFixed(2)}</td>
         <td>${escH(String(p.vat_rate || 0))}%</td>
