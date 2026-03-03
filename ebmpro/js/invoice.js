@@ -274,10 +274,11 @@ const Invoice = (() => {
 
   /* ── setCustomer ──────────────────────────────────────────── */
   function setCustomer(customer) {
+    const name = customer.company_name || customer.name || customer.customer_name || '';
     currentInvoice.customer_id   = customer.id;
-    currentInvoice.customer_name = customer.name;
+    currentInvoice.customer_name = name;
     const el = document.getElementById('customerSearch');
-    if (el) el.value = customer.name;
+    if (el) el.value = name;
   }
 
   /* ── setInvoiceType ───────────────────────────────────────── */
