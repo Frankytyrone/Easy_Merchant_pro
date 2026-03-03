@@ -10,8 +10,8 @@
   <meta name="apple-mobile-web-app-title" content="EBM Pro">
   <meta name="description" content="Invoicing system for Easy Builders Merchant - Falcarragh &amp; Gweedore">
   <title>Easy Builders Merchant Pro</title>
-  <link rel="manifest" href="/ebmpro/manifest.json">
-  <link rel="stylesheet" href="/ebmpro/css/styles.css">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="stylesheet" href="/css/styles.css">
   <!-- jsPDF loaded from CDN -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" crossorigin="anonymous" defer></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js" crossorigin="anonymous" defer></script>
@@ -622,7 +622,7 @@
       <div class="btn-row">
         <button class="btn btn-light" onclick="App.showAuditLog()">📋 View Audit Log</button>
         <button class="btn btn-light" onclick="triggerBackup()">💾 Download Backup</button>
-        <a href="/ebmpro/help.html" class="btn btn-light" target="_blank">❓ Operator Manual</a>
+        <a href="/help.html" class="btn btn-light" target="_blank">❓ Operator Manual</a>
       </div>
 
       <!-- Audit log table (inline) -->
@@ -1659,23 +1659,23 @@
 <!-- ═══════════════════════════════════════════════════════════
      SCRIPTS
 ════════════════════════════════════════════════════════════ -->
-<script src="/ebmpro/js/config.js"></script>
-<script src="/ebmpro/js/db.js"></script>
-<script src="/ebmpro/js/sync.js"></script>
-<script src="/ebmpro/js/auth.js"></script>
-<script src="/ebmpro/js/customer.js"></script>
-<script src="/ebmpro/js/product.js"></script>
-<script src="/ebmpro/js/invoice.js"></script>
-<script src="/ebmpro/js/pdf.js"></script>
-<script src="/ebmpro/js/import.js"></script>
-<script src="/ebmpro/js/system_health.js"></script>
-<script src="/ebmpro/js/app.js"></script>
+<script src="/js/config.js"></script>
+<script src="/js/db.js"></script>
+<script src="/js/sync.js"></script>
+<script src="/js/auth.js"></script>
+<script src="/js/customer.js"></script>
+<script src="/js/product.js"></script>
+<script src="/js/invoice.js"></script>
+<script src="/js/pdf.js"></script>
+<script src="/js/import.js"></script>
+<script src="/js/system_health.js"></script>
+<script src="/js/app.js"></script>
 
 <script>
 /* ── Service Worker Registration ──────────────────────────── */
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/ebmpro/sw.js', { scope: '/ebmpro/' })
+    navigator.serviceWorker.register('/sw.js', { scope: '/' })
       .then(reg => console.info('[SW] Registered, scope:', reg.scope))
       .catch(err => console.warn('[SW] Registration failed:', err));
   });
@@ -1800,7 +1800,7 @@ async function pwaInstall() {
 <button
   id="helpFloatBtn"
   aria-label="Open help"
-  onclick="window.open('/ebmpro/help.html','_blank')"
+  onclick="window.open('/help.html','_blank')"
   style="
     position:fixed;bottom:1.5rem;right:1.5rem;z-index:7000;
     width:48px;height:48px;border-radius:50%;border:none;cursor:pointer;
