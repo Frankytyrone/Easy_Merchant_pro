@@ -36,6 +36,7 @@ const App = (() => {
       case 'settingsScreen': showSettings();         break;
       case 'adminScreen':    loadAdminDashboard();   break;
       case 'stockScreen':    loadStock();            break;
+      case 'productsScreen': loadProductList();      break;
       case 'quotesScreen':   loadQuotes();           break;
       case 'recurringScreen': loadRecurring();       break;
       case 'expensesScreen': loadExpenses();         break;
