@@ -269,6 +269,128 @@ const Product = (() => {
     });
   }
 
+  /* ── loadProducts ─────────────────────────────────────────── */
+  async function loadProducts(page = 1, perPage = 50) {
+    try {
+      const resp = await fetch(
+        `/ebmpro_api/products.php?page=${page}&per_page=${perPage}`,
+        { headers: Auth.getAuthHeaders() }
+      );
+      if (!resp.ok) throw new Error('API error');
+      const data = await resp.json();
+      return data; // { success, data: [...], meta: { total, page, pages } }
+    } catch {
+      try {
+        const all = await DB.getAll('products');
+        return { success: true, data: all, meta: { total: all.length, page: 1, pages: 1 } };
+      } catch { return { success: false, data: [], meta: {} }; }
+    }
+  }
+
+  /* ── saveProduct ──────────────────────────────────────────── */
+  async function saveProduct(formData, id = null) {
+    // Map form fields to API column names
+    const payload = {
+      product_code: (formData.product_code || formData.code || '').trim(),
+      description:  (formData.description  || '').trim(),
+      category:     (formData.category     || '').trim() || null,
+      price:        parseFloat(formData.price ?? formData.unit_price ?? 0),
+      vat_rate:     parseFloat(formData.vat_rate ?? 23),
+      unit:         (formData.unit         || 'each').trim(),
+    };
+
+    if (!payload.description) {
+      throw new Error('Product description is required');
+    }
+
+    const method  = id ? 'PUT' : 'POST';
+    const url     = id
+      ? `/ebmpro_api/products.php?id=${encodeURIComponent(id)}`
+      : '/ebmpro_api/products.php';
+
+    const resp = await fetch(url, {
+      method,
+      headers: Auth.getAuthHeaders(),
+      body:    JSON.stringify(payload),
+    });
+    const result = await resp.json();
+    if (!resp.ok || result.success === false) {
+      throw new Error(result.error || result.message || `Server error (${resp.status})`);
+    }
+    // Bust search cache so updated product appears in searches immediately
+    clearCache();
+    return result; // { success: true, data: { ...product } }
+  }
+
+  /* ── deleteProduct ────────────────────────────────────────── */
+  async function deleteProduct(id) {
+    const resp = await fetch(
+      `/ebmpro_api/products.php?id=${encodeURIComponent(id)}`,
+      { method: 'DELETE', headers: Auth.getAuthHeaders() }
+    );
+    const result = await resp.json();
+    if (!resp.ok || result.success === false) {
+      throw new Error(result.error || result.message || `Server error (${resp.status})`);
+    }
+    clearCache();
+    return result;
+  }
+
+  /* ── renderProductList ────────────────────────────────────── */
+  function renderProductList(products, containerEl) {
+    if (!containerEl) return;
+    if (!products || !products.length) {
+      containerEl.innerHTML = '<p class="text-muted" style="padding:1rem">No products found.</p>';
+      return;
+    }
+    containerEl.innerHTML = `
+      <table class="data-table" style="width:100%">
+        <thead>
+          <tr>
+            <th>Code</th>
+            <th>Description</th>
+            <th>Category</th>
+            <th>Price</th>
+            <th>VAT %</th>
+            <th>Unit</th>
+            <th style="width:110px">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${products.map(p => `
+            <tr data-id="${p.id}">
+              <td>${escapeHtml(p.product_code || '')}</td>
+              <td>${escapeHtml(p.description  || '')}</td>
+              <td>${escapeHtml(p.category     || '')}</td>
+              <td class="text-right">${fmt(p.price)}</td>
+              <td class="text-right">${parseFloat(p.vat_rate || 0).toFixed(1)}%</td>
+              <td>${escapeHtml(p.unit || 'each')}</td>
+              <td>
+                <button class="btn-sm btn-edit"   data-id="${p.id}" aria-label="Edit product">✏️</button>
+                <button class="btn-sm btn-delete" data-id="${p.id}" aria-label="Delete product">🗑️</button>
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
+  }
+
+  /* ── getProductById ───────────────────────────────────────── */
+  async function getProductById(id) {
+    try {
+      const resp = await fetch(
+        `/ebmpro_api/products.php?id=${encodeURIComponent(id)}`,
+        { headers: Auth.getAuthHeaders() }
+      );
+      if (!resp.ok) throw new Error('API error');
+      const data = await resp.json();
+      return data.data || data;
+    } catch {
+      return null;
+    }
+  }
+
   return {
     searchProducts,
     debouncedSearch,
@@ -277,5 +399,10 @@ const Product = (() => {
     clearCache,
     openBarcodeScanner,
     closeBarcodeScanner,
+    loadProducts,
+    saveProduct,
+    deleteProduct,
+    renderProductList,
+    getProductById,
   };
 })();
