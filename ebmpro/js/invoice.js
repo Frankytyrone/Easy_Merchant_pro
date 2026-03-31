@@ -45,7 +45,7 @@ const Invoice = (() => {
   function addItem(product) {
     const item = {
       product_id:   product.id   || null,
-      code:         product.code || '',
+      code:         product.product_code || product.code || '',
       description:  product.description || '',
       qty:          1,
       unit_price:   parseFloat(product.price) || 0,
@@ -197,16 +197,23 @@ const Invoice = (() => {
 
   /* ── saveInvoice ──────────────────────────────────────────── */
   async function saveInvoice() {
-    // Sync store_code from app state
     currentInvoice.store_code = App.getCurrentStore();
-    const method  = currentInvoice.id ? 'PUT' : 'POST';
-    const url     = currentInvoice.id
+    const method = currentInvoice.id ? 'PUT' : 'POST';
+    const url    = currentInvoice.id
       ? `/ebmpro_api/invoices.php?id=${encodeURIComponent(currentInvoice.id)}`
       : '/ebmpro_api/invoices.php';
-    const result  = await Sync.syncData(url, currentInvoice, method);
 
-    if (result && result.id) {
-      currentInvoice.id = result.id;
+    // Let errors propagate — caller (app.js) is responsible for showing the error toast
+    const result = await Sync.syncData(url, currentInvoice, method);
+
+    // API returns { success, data: { id, invoice_number, ... } }
+    const saved = result.data || result;
+    if (saved && saved.id) {
+      currentInvoice.id             = saved.id;
+      currentInvoice.invoice_number = saved.invoice_number || currentInvoice.invoice_number;
+      // Update number display if visible
+      const numEl = document.getElementById('invoiceNumberDisplay');
+      if (numEl) numEl.textContent = currentInvoice.invoice_number || '(new)';
       // Cache locally
       await DB.save('invoices', currentInvoice);
     }
@@ -274,10 +281,11 @@ const Invoice = (() => {
 
   /* ── setCustomer ──────────────────────────────────────────── */
   function setCustomer(customer) {
+    const name = customer.company_name || customer.name || customer.customer_name || '';
     currentInvoice.customer_id   = customer.id;
-    currentInvoice.customer_name = customer.name;
+    currentInvoice.customer_name = name;
     const el = document.getElementById('customerSearch');
-    if (el) el.value = customer.name;
+    if (el) el.value = name;
   }
 
   /* ── setInvoiceType ───────────────────────────────────────── */

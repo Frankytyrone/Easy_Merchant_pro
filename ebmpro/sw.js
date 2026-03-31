@@ -6,18 +6,18 @@
 const CACHE_NAME = 'ebmpro-v1';
 
 const APP_ASSETS = [
-  '/ebmpro/',
-  '/ebmpro/index.html',
-  '/ebmpro/css/styles.css',
-  '/ebmpro/js/db.js',
-  '/ebmpro/js/sync.js',
-  '/ebmpro/js/auth.js',
-  '/ebmpro/js/app.js',
-  '/ebmpro/js/invoice.js',
-  '/ebmpro/js/customer.js',
-  '/ebmpro/js/product.js',
-  '/ebmpro/js/pdf.js',
-  '/ebmpro/manifest.json'
+  '/',
+  '/index.html',
+  '/css/styles.css',
+  '/js/db.js',
+  '/js/sync.js',
+  '/js/auth.js',
+  '/js/app.js',
+  '/js/invoice.js',
+  '/js/customer.js',
+  '/js/product.js',
+  '/js/pdf.js',
+  '/manifest.json'
 ];
 
 /* ── Install: pre-cache all app assets ─────────────────────── */
